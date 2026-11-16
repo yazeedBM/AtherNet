@@ -587,6 +587,19 @@ pub fn packet_detail_json(analysis: &Analysis, file: &[u8], index: usize) -> Str
     let start = row.offset as usize;
     let end = start.saturating_add(row.captured_len as usize).min(file.len());
     let bytes: &[u8] = if start <= end { &file[start..end] } else { &[] };
+    packet_detail_from(analysis, index, bytes)
+}
+
+/// The same, given only that packet's own bytes.
+///
+/// The browser holds the whole capture, so it slices. Anything reading from
+/// a disk can seek to the offset the index kept and read `captured_len`
+/// bytes instead, which is the difference between opening a packet in a two
+/// gigabyte file and loading two gigabytes to do it.
+pub fn packet_detail_from(analysis: &Analysis, index: usize, bytes: &[u8]) -> String {
+    let Some(row) = analysis.packets.row(index) else {
+        return format!("{{\"error\":\"packet {index} is not in this capture\"}}");
+    };
     let link = analysis
         .summary
         .link_types

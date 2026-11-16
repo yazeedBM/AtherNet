@@ -45,10 +45,15 @@ file is read and analysed in the page.
 **The capture never leaves the machine**, and not as a promise: there is no
 server in this project, and the WebAssembly module has no imports - no
 network, no file system, no clock. There is nowhere for it to send anything.
-Nothing is stored between visits either; closing a capture removes it and
-closing the tab removes them all. Captures are customer traffic, and the only
-privacy guarantee worth much is the one that is structurally impossible to
-break.
+Captures are customer traffic, and the only privacy guarantee worth much is
+the one that is structurally impossible to break.
+
+Nothing is kept between visits unless you tick **Keep these on this device**
+in the sidebar, which is off and stays off until somebody decides otherwise.
+Even then it keeps the *findings*, never the capture file - so a capture
+reopened tomorrow shows what was wrong with it and cannot show its packets,
+and the screen says exactly that rather than failing. Turning it off clears
+what was kept.
 
 If you have no capture to hand, the empty screen offers the example corpus:
 thirteen small files with faults planted in them on purpose, which is what the
@@ -281,10 +286,17 @@ file as soon as its report is out, and the explorer re-reads the file when you
 look at its packets, so opening a folder of captures does not leave every
 one of them resident.
 
-The desktop app does not have the explorer yet: its command set still returns
-only the report. The session API the browser uses - open, report, packets,
-packet, close - is what it needs, and it cannot be written honestly until
-there is a toolchain here that compiles it.
+The desktop app has the same command set, function for function with the
+WebAssembly one, and one difference that is the point of having a desktop
+build at all: a session there keeps the capture's **path**, not its bytes.
+The browser has to hold the whole file to show one packet; the desktop seeks
+to the offset the packet index kept and reads only that packet. A two
+gigabyte capture costs two gigabytes of memory in the browser and a few
+hundred bytes there.
+
+None of that has been compiled. Everything those commands call is covered by
+the core's tests; the wiring between them is not, and will not be until there
+is a toolchain here that builds it.
 
 ## The assistant
 
@@ -475,11 +487,18 @@ is missing - wiring a model in is a few hundred lines against an interface
 that already exists, and everything that makes such a model safe to trust
 with somebody's capture is written and under test.
 
-Every feature the brief named is now built, which makes the remaining gap a
-different kind. Nobody who has never used Wireshark has sat in front of this,
-and the gate for step 3 says they should be able to name the problem in a
-test capture unaided. Until somebody does that, the claim that this is easier
-to understand than a packet list is an intention rather than a result.
+Every feature the brief named is now built, which makes the remaining gaps a
+different kind.
+
+Nobody who has never used Wireshark has sat in front of this, and the gate
+for step 3 says they should be able to name the problem in a test capture
+unaided. Until somebody does that, the claim that this is easier to
+understand than a packet list is an intention rather than a result.
+
+And every fixture in the corpus was written by hand. That is why the expected
+result is known exactly, and exactly why the corpus cannot catch what real
+traffic does that nobody thought to write down. The first real capture this
+is pointed at will probably find something.
 
 Steps 1 and 2 are **done and passed**: the throughput gate by measurement, the
 corpus gate by `node tools/check-corpus.mjs`, which matches all nineteen
@@ -504,10 +523,9 @@ reading the screen is no substitute for watching someone use it.
 What the analysis still does not have, and would want before anyone leaned on
 it:
 
-- **A database.** Findings and the packet index are built in memory and
-  thrown away. Nothing survives a reload, and the explorer re-reads a capture
-  each time you open its packets rather than keeping the index between
-  visits.
+- **A database.** Findings can be kept in the browser between visits, but
+  the packet index cannot: it is rebuilt each time a capture's packets are
+  opened, and nothing can be searched across captures or across sessions.
 - **Window analysis.** Resent data is detected; zero windows, window scaling
   and the stalls they cause are not. That needs the options parsed out of the
   TCP header, which the decoder currently steps over.

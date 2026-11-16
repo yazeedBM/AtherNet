@@ -49,6 +49,7 @@ pub use findings::{Confidence, Evidence, Finding, Severity};
 pub use flow::{Addr, FlowKey, FlowStats, FlowTable};
 pub use packets::{PacketIndex, PacketKind, PacketRow};
 pub use report::{
-    assistant_json, capture_json, packet_detail_json, packets_json, PacketQuery,
+    assistant_json, capture_json, packet_detail_from, packet_detail_json, packets_json,
+    PacketQuery,
 };
 pub use summary::CaptureSummary;

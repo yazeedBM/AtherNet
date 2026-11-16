@@ -212,3 +212,22 @@
     padding: 28px 18px;
   }
 }
+
+.retain {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 10px 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.retain input {
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.retain:hover span {
+  color: var(--ink);
+}

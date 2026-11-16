@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   analyseFiles,
   filesFromDrop,
@@ -9,6 +9,14 @@ import {
 import { Assistant } from './Assistant';
 import { AddressingTable, ConversationList, PacketExplorer } from './Explorer';
 import { ExportPanel } from './ExportPanel';
+import {
+  forgetEverything,
+  loadCaptures,
+  retentionIsOn,
+  saveCaptures,
+  setRetention,
+  storedSize,
+} from './storage';
 import {
   exampleFiles,
   CONFIDENCE_HELP,
@@ -60,7 +68,11 @@ export function App() {
   // empty on purpose: it is a tool for looking at your own capture, and
   // opening on someone else's sample data invites the reader to mistake it
   // for theirs.
-  const [captures, setCaptures] = useState<Capture[]>([]);
+  // Captures kept from a previous visit, if that was asked for. The reports
+  // survive; the files do not, which the explorer says plainly when somebody
+  // opens the packets of a restored capture.
+  const [captures, setCaptures] = useState<Capture[]>(() => loadCaptures());
+  const [retain, setRetain] = useState(() => retentionIsOn());
   // The files themselves, kept so the explorer can re-read one when somebody
   // opens its packets. The analysis pass closes every capture it opens, so
   // this is a handle to the file rather than its bytes.
@@ -79,6 +91,18 @@ export function App() {
   const [depth, setDepth] = useState<Depth>('plain');
   const [openFinding, setOpenFinding] = useState<Finding | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
+
+  // Writing on every change rather than on a timer: a browser tab can close
+  // without warning, and a half-written set is worse than none.
+  useEffect(() => {
+    if (!retain) return;
+    const failure = saveCaptures(captures);
+    if (failure) {
+      setRetain(false);
+      setRetention(false);
+      setProblems([{ file: 'keeping captures', message: failure }]);
+    }
+  }, [captures, retain]);
 
   const addFiles = useCallback(async (incoming: File[]) => {
     if (incoming.length === 0) {
@@ -141,6 +165,7 @@ export function App() {
   function removeEverything() {
     setCaptures([]);
     setFiles(new Map());
+    forgetEverything();
     setProblems([]);
     setFilter(EMPTY_FILTER);
     setOpenFinding(null);
@@ -326,9 +351,31 @@ export function App() {
           )}
         </div>
 
+        <label className="retain">
+          <input
+            type="checkbox"
+            checked={retain}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setRetain(on);
+              setRetention(on);
+              if (on) saveCaptures(captures);
+            }}
+          />
+          <span>
+            Keep these on this device
+            {retain && storedSize() > 0 && (
+              <span className="muted"> · {Math.round(storedSize() / 1024)} kB kept</span>
+            )}
+          </span>
+        </label>
+
         <p className="rail-note">
           Drop .pcap or .pcapng files here, or a folder of them. They are read on this machine and never
-          uploaded: closing one removes it, and closing the tab removes them all.
+          uploaded.{' '}
+          {retain
+            ? 'Findings are being kept in this browser until you close them or turn this off. The capture files themselves are never kept, so a capture reopened tomorrow can show its findings but not its packets.'
+            : 'Closing one removes it, and closing the tab removes them all.'}
         </p>
       </aside>
 
@@ -362,6 +409,7 @@ export function App() {
 
         {captures.length === 0 && !progress ? (
           <EmptyState
+            keeping={retain}
             onOpenFiles={() => filePicker.current?.click()}
             onOpenFolder={() => folderPicker.current?.click()}
             onLoadExamples={() => void addFiles(exampleFiles())}
@@ -606,10 +654,12 @@ export function App() {
  * plainly rather than burying in a settings page.
  */
 function EmptyState({
+  keeping,
   onOpenFiles,
   onOpenFolder,
   onLoadExamples,
 }: {
+  keeping: boolean;
   onOpenFiles: () => void;
   onOpenFolder: () => void;
   onLoadExamples: () => void;
@@ -633,9 +683,12 @@ function EmptyState({
         </div>
         <p className="privacy">
           <strong>Your capture stays on this machine.</strong> It is read here in the page, by the analyser
-          compiled into the app. There is no server to send it to, nothing is uploaded, and nothing is stored
-          between visits - close the tab and it is gone. Nothing is sent to an AI service unless you ask a
-          question, and the assistant will say what it is about to share before it does.
+          compiled into the app. There is no server to send it to and nothing is uploaded.{' '}
+          {keeping
+            ? 'You have asked for findings to be kept in this browser between visits; capture files themselves are never kept. Turn that off in the sidebar to go back to keeping nothing.'
+            : 'Nothing is stored between visits - close the tab and it is gone.'}{' '}
+          Nothing is sent to an AI service unless you ask a question, and the assistant will say what it is
+          about to share before it does.
         </p>
         <p className="muted">
           Nothing to hand?{' '}
