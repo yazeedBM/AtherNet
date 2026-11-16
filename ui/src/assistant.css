@@ -1,0 +1,140 @@
+/* The assistant panel. */
+
+.assistant-about {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+.modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mode-note {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ask {
+  display: flex;
+  gap: 6px;
+}
+
+.ask .search.small {
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.reply {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.reply h4 {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.reply h4:first-of-type {
+  margin-top: 0;
+}
+
+.reply-unsure {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.statements {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* What might explain it, and what the capture cannot settle, are set back
+   from what it saw. The three are not the same kind of claim. */
+.statements.soft {
+  color: var(--muted);
+}
+
+.cites {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.cite {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border: 1px solid var(--line);
+  background: var(--info-bg);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.cite:hover {
+  border-color: var(--accent);
+}
+
+/* A citation that does not resolve never looks clickable. */
+.cite.is-broken {
+  color: var(--error);
+  background: var(--error-bg);
+  border-color: var(--error);
+  border-style: dashed;
+  cursor: help;
+}
+
+.assistant-source {
+  margin: 16px 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--info-bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.redactions {
+  margin: 10px 0;
+  font-size: 12px;
+}
+
+.pack {
+  margin: 10px 0 0;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 340px;
+  overflow: auto;
+}

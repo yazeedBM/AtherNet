@@ -1,0 +1,20 @@
+[package]
+name = "athernet-core"
+description = "Streaming capture-file reader, decoders and flow assembly for AtherNet."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+# Deliberately no dependencies. The capture formats and the headers we decode
+# are small and stable, and a dependency-free core keeps the licence story
+# simple and the build fast. See the design proposal, "Open decisions".
+[dependencies]
+
+[lib]
+name = "athernet_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "athernet-bench"
+path = "src/bin/athernet-bench.rs"

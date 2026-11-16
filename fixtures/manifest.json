@@ -1,0 +1,264 @@
+{
+  "generated": "node tools/make-fixtures.mjs",
+  "captures": [
+    {
+      "file": "clean-browse.pcap",
+      "description": "A laptop resolves a name and loads a page. Nothing is wrong here.",
+      "packets": 11,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "none",
+          "note": "No finding of any kind. A false positive here is a bug."
+        },
+        {
+          "type": "binding",
+          "confidence": "strong",
+          "note": "192.168.1.1 is 02:00:00:00:00:01, from an ARP reply"
+        }
+      ]
+    },
+    {
+      "file": "dns-nxdomain.pcap",
+      "description": "A lookup for a name that does not exist. The resolver answers NXDOMAIN.",
+      "packets": 2,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "dns_error",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "rcode 3, NXDOMAIN, for intranet.corp.example"
+        }
+      ]
+    },
+    {
+      "file": "dns-unanswered.pcap",
+      "description": "Two lookups, no response in the capture. Suspected, never confirmed.",
+      "packets": 2,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "dns_unanswered",
+          "severity": "warning",
+          "confidence": "suspected",
+          "note": "Retried after 5 s, no response seen at this capture point"
+        }
+      ]
+    },
+    {
+      "file": "tcp-refused.pcap",
+      "description": "A connection to port 445 answered with a reset.",
+      "packets": 2,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "connection_refused",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "RST/ACK answering the SYN"
+        }
+      ]
+    },
+    {
+      "file": "tcp-unanswered.pcap",
+      "description": "Three connection attempts to port 8080, nothing comes back.",
+      "packets": 3,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "connection_unanswered",
+          "severity": "warning",
+          "confidence": "suspected",
+          "note": "Three SYNs, no SYN/ACK and no ICMP. One direction only."
+        }
+      ]
+    },
+    {
+      "file": "tcp-blocked-by-icmp.pcap",
+      "description": "A connection attempt answered by an ICMP administratively prohibited.",
+      "packets": 2,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "blocked_by_device",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "ICMP type 3 code 13 from 192.168.1.1, quoting the SYN"
+        }
+      ]
+    },
+    {
+      "file": "arp-duplicate-address.pcapng",
+      "description": "Two devices answer ARP for 192.168.1.20 at the same time.",
+      "packets": 3,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "duplicate_address",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "192.168.1.20 claimed by 02:00:00:00:00:20 and 02:00:00:00:00:66 within 500 ms"
+        }
+      ]
+    },
+    {
+      "file": "truncated-snaplen.pcap",
+      "description": "Captured with a 96-byte snaplen, so payloads are cut off.",
+      "packets": 2,
+      "snaplen": 96,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "capture_incomplete",
+          "severity": "info",
+          "confidence": "incomplete evidence",
+          "note": "Packets truncated at 96 bytes; payload detectors must report themselves as unavailable"
+        }
+      ]
+    },
+    {
+      "file": "dropped-by-capture-tool.pcapng",
+      "description": "The interface reports 412 dropped packets, so absence proves nothing.",
+      "packets": 3,
+      "snaplen": 262144,
+      "reportedDrops": 412,
+      "expect": [
+        {
+          "type": "capture_incomplete",
+          "severity": "info",
+          "confidence": "incomplete evidence",
+          "note": "412 packets dropped by the capture tool; every \"no response\" in this file is downgraded"
+        }
+      ]
+    },
+    {
+      "file": "dhcp-nak.pcap",
+      "description": "A device tries to keep an address the server will not give it.",
+      "packets": 2,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "dhcp_nak",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "NAK answering a REQUEST for 10.14.3.55, server 192.168.1.1"
+        }
+      ]
+    },
+    {
+      "file": "dhcp-no-offer.pcap",
+      "description": "Two DHCP DISCOVERs with no offer in the capture.",
+      "packets": 2,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "dhcp_no_offer",
+          "severity": "warning",
+          "confidence": "suspected",
+          "note": "No OFFER at this capture point; a relay or a dead scope would both look like this"
+        }
+      ]
+    },
+    {
+      "file": "tls-handshake-failure.pcap",
+      "description": "The connection opens, then the server rejects the handshake with a fatal alert.",
+      "packets": 6,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "tls_alert",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "Fatal alert 48, unknown_ca, for intranet.corp.example. The reset that follows is the same event and must not be reported twice."
+        }
+      ]
+    },
+    {
+      "file": "bulk-transfer.pcap",
+      "description": "A 50,000-packet file transfer. Used for the throughput gate.",
+      "packets": 50000,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "none",
+          "note": "A healthy bulk transfer. No findings; this file is for timing."
+        }
+      ]
+    },
+    {
+      "file": "wireshark-style.pcapng",
+      "description": "Written the way Wireshark writes one: option blocks everywhere, and a name resolution block to step over.",
+      "packets": 7,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "dns_error",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "rcode 3, NXDOMAIN, for fileserver.corp.internal"
+        },
+        {
+          "type": "connection_refused",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "RST/ACK answering the SYN to port 445"
+        }
+      ]
+    },
+    {
+      "file": "prompt-injection.pcap",
+      "description": "Names and server messages written to be read as instructions by whatever summarises the capture.",
+      "packets": 9,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "dns_unanswered",
+          "severity": "warning",
+          "confidence": "suspected",
+          "note": "The name is an injection attempt; the finding about it is ordinary"
+        },
+        {
+          "type": "tls_alert",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "Fatal alert 48; the server name is a second injection attempt"
+        },
+        {
+          "type": "dhcp_nak",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "The NAK message is a third attempt, in option 56"
+        }
+      ]
+    },
+    {
+      "file": "address-reassigned.pcap",
+      "description": "One address answered by two devices, forty-five seconds apart. A handover, not a clash.",
+      "packets": 4,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "address_moved",
+          "severity": "info",
+          "confidence": "confirmed",
+          "note": "192.168.1.60 moved from 02:00:00:00:00:20 to 02:00:00:00:00:66 after 45 s, with no overlap"
+        }
+      ]
+    }
+  ]
+}

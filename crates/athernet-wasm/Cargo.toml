@@ -1,0 +1,16 @@
+[package]
+name = "athernet-wasm"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "The AtherNet analysis core, compiled for the browser."
+
+[lib]
+crate-type = ["cdylib"]
+
+# No wasm-bindgen, and no dependencies at all beyond the core itself. The
+# interface is four C functions over a byte buffer, which is all that is
+# needed to hand a capture file in and get JSON back - and it keeps the crate
+# that reads untrusted files dependency-free, which was the point.
+[dependencies]
+athernet-core = { path = "../athernet-core" }

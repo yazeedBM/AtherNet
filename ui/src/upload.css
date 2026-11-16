@@ -1,0 +1,214 @@
+/* Opening a capture: the rail controls, the drop target, progress, and the
+   screen the app shows before anything is open. */
+
+.hidden-input {
+  display: none;
+}
+
+/* The whole window is the drop target, so a file dropped anywhere lands.
+   The outline appears only while something is being dragged over it. */
+.shell.is-dragging::after {
+  content: 'Drop capture files to open them';
+  position: fixed;
+  inset: 12px;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 88%, var(--accent));
+  color: var(--accent);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.rail-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rail-row .rail-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.rail-close {
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 6px 8px;
+  /* Hidden until the row is hovered or the button itself has focus, so the
+     rail stays quiet - but never hidden from the keyboard. */
+  opacity: 0;
+}
+
+.rail-row:hover .rail-close,
+.rail-close:focus-visible {
+  opacity: 1;
+}
+
+.rail-close:hover {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.rail-actions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0 10px;
+}
+
+.open-button {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.open-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.open-button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.open-button.primary:hover {
+  filter: brightness(1.08);
+  color: #fff;
+}
+
+.open-button.ghost {
+  background: none;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------- progress */
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.progress-text {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--info-bg);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+
+.problems {
+  margin: 0;
+  padding: 10px 20px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-bottom: 1px solid var(--line);
+}
+
+/* ---------------------------------------------------------- empty state */
+
+.work.empty {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.dropzone {
+  max-width: 560px;
+  text-align: center;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  padding: 40px 32px;
+  background: var(--panel);
+}
+
+.dropzone h1 {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+
+.dropzone .lead {
+  margin: 0 0 20px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.dropzone code {
+  background: var(--info-bg);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 13px;
+}
+
+.dropzone-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.privacy {
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+  background: var(--info-bg);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0 0 16px;
+}
+
+.privacy strong {
+  color: var(--ink);
+}
+
+.linklike {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  font: inherit;
+}
+
+@media (max-width: 760px) {
+  .dropzone {
+    padding: 28px 18px;
+  }
+}

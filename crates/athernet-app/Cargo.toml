@@ -1,0 +1,20 @@
+[package]
+name = "athernet-app"
+description = "The AtherNet desktop shell: Tauri window, commands over the analysis core."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+athernet-core = { path = "../athernet-core" }
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# Tauri's own feature, kept as the template has it.
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,293 @@
+/* The conversation list and the packet explorer. */
+
+.views {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.view-tab {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.view-tab:hover {
+  color: var(--ink);
+}
+
+.view-tab.is-on {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.empty-note {
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------------ grids */
+
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.grid th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+
+.grid td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.grid .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.grid.packets tbody tr {
+  cursor: pointer;
+}
+
+.grid.packets tbody tr:hover {
+  background: var(--info-bg);
+}
+
+.grid.packets tbody tr.is-selected {
+  background: color-mix(in srgb, var(--panel) 70%, var(--accent));
+}
+
+.grid .summary {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* --------------------------------------------------------------- explorer */
+
+.explorer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.explorer-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.search.small {
+  flex: 1;
+  min-width: 240px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.explorer-count {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.explorer-cap {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--info-bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--muted);
+}
+
+.explorer-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.explorer-body:has(.packet-detail) {
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+.packet-list {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 12px;
+}
+
+.pager button:disabled {
+  opacity: 0.4;
+}
+
+/* ----------------------------------------------------------- one packet */
+
+.packet-detail {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px 14px;
+  max-height: 70vh;
+  overflow: auto;
+  position: sticky;
+  top: 12px;
+}
+
+.packet-detail header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.packet-detail h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.packet-detail .rail-close {
+  opacity: 1;
+}
+
+.layer {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.layer h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.layer dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+
+.layer dl > div {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12px;
+}
+
+.layer dt {
+  color: var(--muted);
+}
+
+.layer dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.hex {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.hex > div {
+  display: flex;
+  gap: 10px;
+  white-space: pre;
+}
+
+.hex-offset {
+  color: var(--muted);
+}
+
+.hex-bytes {
+  min-width: 23ch;
+}
+
+.hex-text {
+  color: var(--muted);
+}
+
+@media (max-width: 1100px) {
+  .explorer-body:has(.packet-detail) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .packet-detail {
+    position: static;
+    max-height: none;
+  }
+}
+
+.addressing-head {
+  margin: 22px 0 4px;
+  font-size: 14px;
+}
+
+.export {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.export-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.export-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.export-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.export-size {
+  font-size: 12px;
+}
+
+.export-preview {
+  max-height: 52vh;
+}

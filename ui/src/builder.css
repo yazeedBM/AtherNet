@@ -1,0 +1,175 @@
+/* The visual AND/OR filter builder. */
+
+.builder {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.builder select,
+.builder input {
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.builder select:focus-visible,
+.builder input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.builder-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.builder-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+/* The word that joins two groups sits on the line between them, so the
+   structure is visible without drawing a single bracket. */
+.joiner {
+  position: absolute;
+  top: -12px;
+  left: 14px;
+}
+
+.joiner .chip {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 2px 10px;
+}
+
+.builder-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.builder-group-head label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.builder-group-head .rail-close {
+  opacity: 1;
+}
+
+.condition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.condition .search.small {
+  flex: 1;
+  min-width: 140px;
+}
+
+.condition .rail-close {
+  opacity: 0.6;
+}
+
+.condition:hover .rail-close {
+  opacity: 1;
+}
+
+.chip.tiny {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.condition-hint {
+  flex-basis: 100%;
+  font-size: 11px;
+}
+
+.builder-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* The filter written back as a sentence. This is the part people actually
+   read to check they built what they meant. */
+.builder-sentence {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  background: var(--info-bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.builder-save {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.builder-save .search.small {
+  flex: 1;
+  max-width: 280px;
+}
+
+.builder-save button:disabled {
+  opacity: 0.45;
+}
+
+.builder-saved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.saved-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.saved-chip .rail-close {
+  opacity: 0.6;
+  padding: 4px 5px;
+  font-size: 13px;
+}
+
+.saved-chip:hover .rail-close {
+  opacity: 1;
+}
+
+.builder-note {
+  margin: 0;
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .condition .search.small {
+    min-width: 0;
+  }
+}

@@ -1,0 +1,21 @@
+/target
+**/target
+node_modules
+dist
+.vite
+*.log
+
+# Generated test captures. Rebuild with: node tools/make-fixtures.mjs
+/fixtures/*.pcap
+/fixtures/*.pcapng
+
+# Never commit real captures - they contain customer traffic.
+*.pcap
+*.pcapng
+!/fixtures/manifest.json
+
+# wasm build artefact, produced by tools/build-wasm.mjs
+ui/src/athernet.wasm
+
+# Generated from fixtures/ by tools/make-examples.mjs
+ui/src/example-captures.json
