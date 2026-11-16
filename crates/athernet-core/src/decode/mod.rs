@@ -102,6 +102,68 @@ impl TransportLayer {
     }
 }
 
+/// The TCP options this app has a use for.
+///
+/// Everything else in the option space is stepped over. Three of them matter
+/// here: the window scale, because without it the window field on a modern
+/// connection means nothing; the maximum segment size, because it is the
+/// clearest statement of what each end thinks the path can carry; and
+/// whether selective acknowledgement was offered, because its absence
+/// changes how a connection recovers from loss.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TcpOptions {
+    /// Shift to apply to every window field after the handshake. Offered in
+    /// the SYN and only in the SYN, which is why a capture that starts
+    /// mid-connection cannot interpret window sizes at all.
+    pub window_scale: Option<u8>,
+    pub mss: Option<u16>,
+    pub sack_permitted: bool,
+}
+
+impl TcpOptions {
+    pub fn is_empty(&self) -> bool {
+        *self == TcpOptions::default()
+    }
+}
+
+/// Read the option space that follows a TCP header.
+///
+/// Anything malformed stops the walk rather than being guessed past: options
+/// are length-prefixed, and a wrong length walked through would turn the
+/// rest of the space into nonsense that happens to parse.
+fn parse_tcp_options(options: &[u8]) -> TcpOptions {
+    let mut out = TcpOptions::default();
+    let mut i = 0;
+    while i < options.len() {
+        match options[i] {
+            // End of the list.
+            0 => break,
+            // A single byte of padding.
+            1 => i += 1,
+            kind => {
+                if i + 1 >= options.len() {
+                    break;
+                }
+                let len = options[i + 1] as usize;
+                if len < 2 || i + len > options.len() {
+                    break;
+                }
+                let value = &options[i + 2..i + len];
+                match (kind, value.len()) {
+                    (2, 2) => out.mss = Some(be16(value)),
+                    // The standard caps the shift at 14; anything larger is
+                    // a sender being wrong, and is treated as the cap.
+                    (3, 1) => out.window_scale = Some(value[0].min(14)),
+                    (4, 0) => out.sack_permitted = true,
+                    _ => {}
+                }
+                i += len;
+            }
+        }
+    }
+    out
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Decoded {
     pub eth_src: Option<[u8; 6]>,
@@ -114,6 +176,8 @@ pub struct Decoded {
     /// A header ran past the captured bytes. Usually snaplen truncation, and
     /// the reason a detector downgrades its confidence rather than guessing.
     pub short: bool,
+    /// The TCP options, where the packet carried any.
+    pub tcp_options: TcpOptions,
 }
 
 impl Decoded {
@@ -357,6 +421,9 @@ fn decode_transport(proto: u8, bytes: &[u8], offset: usize, end: usize, out: &mu
             });
             if b.len() >= data_offset {
                 out.payload = Some((offset + data_offset, b.len() - data_offset));
+                if data_offset > 20 {
+                    out.tcp_options = parse_tcp_options(&b[20..data_offset]);
+                }
             } else {
                 out.short = true;
             }
@@ -449,6 +516,43 @@ mod tests {
         assert_eq!(d.transport.and_then(|t| t.ports()), Some((51514, 443)));
         assert_eq!(d.tcp_flags() & TCP_SYN, TCP_SYN);
         assert_eq!(d.payload, Some((54, 0)));
+    }
+
+    #[test]
+    fn reads_the_options_that_change_what_a_window_means() {
+        // A SYN with maximum segment size, selective acknowledgement, a
+        // no-op for alignment, and a window scale.
+        let mut seg = tcp(51514, 443, TCP_SYN);
+        seg[12] = 0xa0; // data offset of ten words: twenty bytes of options
+        seg.extend_from_slice(&[2, 4, 0x05, 0xb4]); // MSS 1460
+        seg.extend_from_slice(&[4, 2]); // SACK permitted
+        seg.extend_from_slice(&[1]); // no-op
+        seg.extend_from_slice(&[3, 3, 7]); // window scale, shift of seven
+        seg.extend_from_slice(&[0]); // end of options
+        seg.extend_from_slice(&[0; 9]); // padding out to the data offset
+
+        let frame = ethernet_ipv4(IP_PROTO_TCP, &seg);
+        let d = decode(LinkType::Ethernet, &frame);
+        assert_eq!(d.tcp_options.mss, Some(1460));
+        assert_eq!(d.tcp_options.window_scale, Some(7));
+        assert!(d.tcp_options.sack_permitted);
+        assert_eq!(d.payload, Some((34 + 40, 0)), "options are not payload");
+    }
+
+    #[test]
+    fn an_option_with_a_wrong_length_stops_the_walk() {
+        let mut seg = tcp(51514, 443, TCP_SYN);
+        seg[12] = 0x70; // seven words: eight bytes of options
+        seg.extend_from_slice(&[3, 3, 7]); // a good window scale first
+        seg.extend_from_slice(&[2, 40, 0, 0]); // then a length that runs off
+        seg.extend_from_slice(&[0]);
+
+        let frame = ethernet_ipv4(IP_PROTO_TCP, &seg);
+        let d = decode(LinkType::Ethernet, &frame);
+        // What was read before the bad length stands; nothing after it is
+        // invented.
+        assert_eq!(d.tcp_options.window_scale, Some(7));
+        assert_eq!(d.tcp_options.mss, None);
     }
 
     #[test]

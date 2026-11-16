@@ -78,7 +78,7 @@ around 2 GB is the ceiling for a single capture here.
 ## The analysis core
 
 ```bash
-cargo test --workspace --exclude athernet-app   # 59 tests + a doc test
+cargo test --workspace --exclude athernet-app   # 64 tests + a doc test
 cargo build --release -p athernet-core --bin athernet-bench
 ./target/release/athernet-bench fixtures/       # findings, and the throughput gate
 ./target/release/athernet-bench --assistant fixtures/   # the assistant gates
@@ -93,7 +93,7 @@ architecture rests on.
 **Measured, 16 November 2026**, on one core of a Windows 11 laptop, GNU
 toolchain, release build, files already in the page cache:
 
-    the whole corpus     50-81 M packets/minute, four consecutive runs
+    the whole corpus     86-100 M packets/minute, four consecutive runs
 
 The spread is the machine, not the code. This is a laptop with other things
 running on it, and a single quiet reading earlier in the same session put the
@@ -223,6 +223,40 @@ Sequence numbers wrap, so they are compared by the sign of the difference
 rather than by size. A connection that has moved four gigabytes has wrapped,
 and a comparison that forgot would report that it resent everything after
 that point. There is a test for it.
+
+### Windows, and the one number a capture cannot interpret
+
+A TCP receiver advertises how much room it has left. When that reaches zero
+it is telling the sender to stop, and the sender does - so nothing is lost,
+nothing is resent, and to whoever is watching a progress bar the transfer
+simply freezes and then carries on. No amount of looking at the network
+explains it, because the answer is in the program at the receiving end that
+stopped reading.
+
+`zero_window` reports that, with how many times and how long the longest
+pause was. It is **confirmed**: a window field of zero is not an inference.
+Two things are deliberately excluded - a reset, which almost always carries
+a window of zero and means the connection is over rather than the buffer is
+full, and a SYN, whose window is the unscaled one. Both have tests.
+
+Where a capture ends while a receiver is still stopped, the pause lasted *at
+least* that long rather than exactly that long, and the finding says which.
+
+The decoder now also reads the TCP options it used to step over: the window
+scale, the largest segment each end will accept, and whether selective
+acknowledgement was offered. The packet view shows them. They are only on
+the handshake, which is the thing worth knowing about window sizes: **the
+scale is agreed in the SYN and nowhere else**, so a capture that starts
+mid-connection cannot interpret a window number at all - a field reading 501
+might mean 501 bytes or 64,128.
+
+That is also why the only window finding here is about zero. Zero is zero
+whatever the scale, so it can be read from any capture. Reporting that a
+window is *small* would mean applying a scale this app often has no way of
+knowing, and being wrong by a factor of up to 16,384 in the direction that
+invents a problem. A window-full detector - the sender having filled the
+advertised window and waiting - needs bytes in flight tracked against it,
+and is not built.
 
 ### The filter
 
@@ -398,7 +432,7 @@ would have leaked on the last line.
 
 ## The labelled corpus
 
-`fixtures/manifest.json` lists all nineteen generated captures with the
+`fixtures/manifest.json` lists all twenty generated captures with the
 findings each one should produce - type, severity, confidence, and a note on
 why. `node tools/check-corpus.mjs` compares the two and exits non-zero on any
 mismatch, so this is a gate rather than a document.
@@ -501,7 +535,7 @@ traffic does that nobody thought to write down. The first real capture this
 is pointed at will probably find something.
 
 Steps 1 and 2 are **done and passed**: the throughput gate by measurement, the
-corpus gate by `node tools/check-corpus.mjs`, which matches all nineteen
+corpus gate by `node tools/check-corpus.mjs`, which matches all twenty
 captures with no false positives on the clean two.
 
 Step 3 works end to end for a capture you open yourself. The dashboard, the
@@ -526,9 +560,10 @@ it:
 - **A database.** Findings can be kept in the browser between visits, but
   the packet index cannot: it is rebuilt each time a capture's packets are
   opened, and nothing can be searched across captures or across sessions.
-- **Window analysis.** Resent data is detected; zero windows, window scaling
-  and the stalls they cause are not. That needs the options parsed out of the
-  TCP header, which the decoder currently steps over.
+- **Window-full detection**: the sender having filled the window it was
+  given and waiting on an acknowledgement. Zero windows are detected; this
+  needs bytes in flight tracked against the advertised window, and that
+  window is often uninterpretable anyway without the handshake.
 - **DNS over TLS and HTTPS**, which are encrypted and invisible here by
   design. Plain DNS over TCP - what a resolver falls back to when an answer
   is too big for UDP - is read, length prefix and all.

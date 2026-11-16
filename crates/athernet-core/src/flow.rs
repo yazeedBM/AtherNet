@@ -150,6 +150,15 @@ pub struct TcpDirection {
     pub resent: u64,
     /// Segments the capture itself recorded twice.
     pub duplicated_by_capture: u64,
+    /// Times this end said it had no room left.
+    pub zero_windows: u64,
+    /// The longest pause between saying so and saying otherwise.
+    pub longest_stall_nanos: i64,
+    /// The shift this end offered in the handshake, if the handshake is in
+    /// the capture at all.
+    pub window_scale: Option<u8>,
+    pub saw_syn: bool,
+    zero_since: Option<i64>,
     highest_end: u32,
     started: bool,
     last_seq: u32,
@@ -162,7 +171,39 @@ pub struct TcpDirection {
 const CAPTURE_DUPLICATE_NANOS: i64 = 1_000_000;
 
 impl TcpDirection {
-    fn observe(&mut self, ts: i64, seq: u32, len: u32) {
+    #[allow(clippy::too_many_arguments)]
+    fn observe(
+        &mut self,
+        ts: i64,
+        seq: u32,
+        len: u32,
+        window: u16,
+        flags: u8,
+        scale: Option<u8>,
+    ) {
+        if flags & TCP_SYN != 0 {
+            self.saw_syn = true;
+            // The scale is offered in the handshake and nowhere else, which
+            // is why a capture that starts mid-connection cannot interpret
+            // a window size at all.
+            if scale.is_some() {
+                self.window_scale = scale;
+            }
+        }
+
+        // A reset carries no meaningful window, and the window on a SYN is
+        // the unscaled one - neither says anything about running out of room.
+        if flags & (TCP_RST | TCP_SYN) == 0 {
+            if window == 0 {
+                self.zero_windows += 1;
+                if self.zero_since.is_none() {
+                    self.zero_since = Some(ts);
+                }
+            } else if let Some(since) = self.zero_since.take() {
+                self.longest_stall_nanos = self.longest_stall_nanos.max(ts - since);
+            }
+        }
+
         if len == 0 {
             return;
         }
@@ -196,6 +237,12 @@ impl TcpDirection {
         self.last_seq = seq;
         self.last_len = len;
         self.last_ts = ts;
+    }
+
+    /// True when the capture ends with this end still saying it has no room.
+    /// The pause is then at least `longest_stall_nanos`, not exactly it.
+    pub fn stalled_at_end(&self) -> bool {
+        self.zero_since.is_some()
     }
 
     /// Resent segments as a share of the data segments in this direction.
@@ -274,9 +321,16 @@ impl FlowStats {
             }
         }
 
-        if let Some(TransportLayer::Tcp { seq, .. }) = decoded.transport {
+        if let Some(TransportLayer::Tcp { seq, window, .. }) = decoded.transport {
             let len = decoded.payload.map(|(_, len)| len as u32).unwrap_or(0);
-            self.tcp[usize::from(!forward)].observe(ts, seq, len);
+            self.tcp[usize::from(!forward)].observe(
+                ts,
+                seq,
+                len,
+                window,
+                tcp_flags,
+                decoded.tcp_options.window_scale,
+            );
         }
     }
 
@@ -537,6 +591,68 @@ mod tests {
         let (_, stats) = table.iter().next().unwrap();
         assert_eq!(stats.tcp[0].payload_segments, 3);
         assert_eq!(stats.tcp[0].resent, 0, "wrapping is not repeating");
+    }
+
+    fn windowed(window: u16, flags: u8) -> Decoded {
+        let mut decoded = tcp_packet(SERVER, 445, CLIENT, 51560, flags);
+        if let Some(TransportLayer::Tcp { window: w, .. }) = &mut decoded.transport {
+            *w = window;
+        }
+        decoded
+    }
+
+    #[test]
+    fn a_receiver_with_no_room_is_measured_from_when_it_said_so() {
+        let mut table = FlowTable::new();
+        let ms = 1_000_000;
+
+        // Room, then none for three hundred milliseconds, then room again.
+        table.observe(0, 0, &windowed(64240, TCP_ACK), 60);
+        table.observe(10 * ms, 1, &windowed(0, TCP_ACK), 60);
+        table.observe(150 * ms, 2, &windowed(0, TCP_ACK), 60);
+        table.observe(310 * ms, 3, &windowed(32000, TCP_ACK), 60);
+        // And a second, shorter stop afterwards.
+        table.observe(400 * ms, 4, &windowed(0, TCP_ACK), 60);
+        table.observe(450 * ms, 5, &windowed(8000, TCP_ACK), 60);
+
+        let (_, stats) = table.iter().next().unwrap();
+        // The packets came from SERVER, which sorts after CLIENT, so this
+        // direction is the reverse one.
+        let direction = &stats.tcp[1];
+        assert_eq!(direction.zero_windows, 3);
+        assert_eq!(
+            direction.longest_stall_nanos,
+            300 * ms,
+            "the longest pause, not the last one and not their sum"
+        );
+        assert!(!direction.stalled_at_end());
+    }
+
+    #[test]
+    fn a_reset_is_not_a_receiver_running_out_of_room() {
+        let mut table = FlowTable::new();
+        // A reset almost always carries a window of zero, and it means the
+        // connection is over rather than that a buffer is full.
+        table.observe(0, 0, &windowed(0, TCP_RST | TCP_ACK), 60);
+        // So does a SYN's window, which is the unscaled one.
+        table.observe(1_000_000, 1, &windowed(0, TCP_SYN), 60);
+
+        let (_, stats) = table.iter().next().unwrap();
+        assert_eq!(stats.tcp[1].zero_windows, 0);
+    }
+
+    #[test]
+    fn a_capture_that_ends_mid_stall_says_so() {
+        let mut table = FlowTable::new();
+        table.observe(0, 0, &windowed(64240, TCP_ACK), 60);
+        table.observe(5_000_000, 1, &windowed(0, TCP_ACK), 60);
+
+        let (_, stats) = table.iter().next().unwrap();
+        assert!(
+            stats.tcp[1].stalled_at_end(),
+            "the pause has no end in this file, so its length is a floor"
+        );
+        assert_eq!(stats.tcp[1].longest_stall_nanos, 0);
     }
 
     #[test]

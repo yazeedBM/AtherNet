@@ -42,6 +42,11 @@ const RESEND_MIN_COUNT: u64 = 5;
 /// share of it is normal everywhere. This is where it stops being normal.
 const RESEND_MIN_RATE: f64 = 0.02;
 
+/// A receiver saying "no room" once during a large transfer is ordinary
+/// flow control. This many times, or one pause this long, is not.
+const ZERO_WINDOW_MIN_COUNT: u64 = 5;
+const ZERO_WINDOW_MIN_STALL_NANOS: i64 = 100_000_000;
+
 /// Below this, duplicated frames are not worth a finding of their own.
 const CAPTURE_DUPLICATE_MIN: u64 = 5;
 
@@ -1052,6 +1057,58 @@ impl Analysis {
                     .check("Capture at the other end as well: whichever end is missing the data tells you which side of the capture point the loss is on.")
                     .check("Check the interfaces along the path for errors and discards.")
                     .check("Check for a duplex mismatch or a failing link if the rate is high and steady."),
+                );
+            }
+        }
+
+        for (key, stats) in &flows {
+            if key.proto != 6 {
+                continue;
+            }
+            for (which, direction) in stats.tcp.iter().enumerate() {
+                if direction.zero_windows == 0 {
+                    continue;
+                }
+                if direction.zero_windows < ZERO_WINDOW_MIN_COUNT
+                    && direction.longest_stall_nanos < ZERO_WINDOW_MIN_STALL_NANOS
+                {
+                    continue;
+                }
+                // The end advertising no room is the one receiving.
+                let (receiver, sender) = if which == 0 {
+                    (key.a, key.b)
+                } else {
+                    (key.b, key.a)
+                };
+                let stall = direction.longest_stall_nanos as f64 / 1e6;
+                let ending = if direction.stalled_at_end() {
+                    " The capture ends while it is still stopped, so the pause lasted at least that long rather than exactly that long."
+                } else {
+                    ""
+                };
+                out.push(
+                    Finding::new(
+                        "zero_window",
+                        Severity::Warning,
+                        // The packet says it outright: a window field of
+                        // zero is not an inference about anything.
+                        Confidence::Confirmed,
+                        format!("{receiver} told {sender} to stop sending"),
+                        format!(
+                            "A TCP receiver advertises how much room it has left, and {receiver} advertised none {} times. Its receive buffer was full, which means the program behind it was not reading as fast as the data arrived. The longest pause was {stall:.0} ms.{ending} Nothing was lost - the sender did as it was told - but to somebody using it this is a transfer that freezes and then carries on.",
+                            direction.zero_windows
+                        ),
+                    )
+                    .at(stats.first_packet, stats.first_ts)
+                    .between(vec![receiver.to_string(), sender.to_string()])
+                    .showing(
+                        stats.first_packet,
+                        0,
+                        format!("the conversation, {} packets in total", stats.packets()),
+                    )
+                    .check("Look at what the receiving program was doing: a full buffer means it stopped reading, not that the network failed.")
+                    .check("Check whether that machine was short of memory or processor time at the same moment.")
+                    .check("If this is a server under load, the network is the messenger rather than the problem."),
                 );
             }
         }

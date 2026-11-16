@@ -753,26 +753,53 @@ pub fn packet_detail_from(analysis: &Analysis, index: usize, bytes: &[u8]) -> St
             window,
         }) => {
             let names = tcp_flag_names(flags);
-            layer(
-                &mut out,
-                &mut layer_first,
-                "TCP",
-                &[
-                    ("Source port", src_port.to_string()),
-                    ("Destination port", dst_port.to_string()),
-                    ("Sequence number", seq.to_string()),
-                    ("Acknowledgement", ack.to_string()),
-                    (
-                        "Flags",
-                        if names.is_empty() {
-                            "none".to_string()
-                        } else {
-                            names
-                        },
+            let mut fields = vec![
+                ("Source port", src_port.to_string()),
+                ("Destination port", dst_port.to_string()),
+                ("Sequence number", seq.to_string()),
+                ("Acknowledgement", ack.to_string()),
+                (
+                    "Flags",
+                    if names.is_empty() {
+                        "none".to_string()
+                    } else {
+                        names
+                    },
+                ),
+                (
+                    "Window",
+                    if window == 0 {
+                        "0 - this end is telling the other to stop sending".to_string()
+                    } else {
+                        window.to_string()
+                    },
+                ),
+            ];
+            // The options are only on the handshake, and they are what makes
+            // the window field above mean anything.
+            let options = decoded.tcp_options;
+            if let Some(scale) = options.window_scale {
+                fields.push((
+                    "Window scale",
+                    format!(
+                        "shift of {scale}, so every later window is multiplied by {}",
+                        1u32 << scale
                     ),
-                    ("Window", window.to_string()),
-                ],
-            );
+                ));
+            }
+            if let Some(mss) = options.mss {
+                fields.push((
+                    "Largest segment accepted",
+                    format!("{mss} bytes"),
+                ));
+            }
+            if options.sack_permitted {
+                fields.push((
+                    "Selective acknowledgement",
+                    "offered, so a single loss need not resend everything after it".to_string(),
+                ));
+            }
+            layer(&mut out, &mut layer_first, "TCP", &fields);
         }
         Some(TransportLayer::Udp {
             src_port,

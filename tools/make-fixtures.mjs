@@ -96,19 +96,28 @@ function udp(src, dst, sport, dport, payload) {
 
 const FLAGS = { FIN: 0x01, SYN: 0x02, RST: 0x04, PSH: 0x08, ACK: 0x10 };
 
-function tcp(src, dst, sport, dport, { seq = 0, ack = 0, flags = 0, window = 64240, payload = Buffer.alloc(0) }) {
-  const seg = Buffer.alloc(20 + payload.length);
+function tcp(src, dst, sport, dport, { seq = 0, ack = 0, flags = 0, window = 64240, payload = Buffer.alloc(0), options = Buffer.alloc(0) }) {
+  // The option space is padded out to a whole number of four-byte words,
+  // because the data offset counts words and nothing else.
+  const padding = (4 - (options.length % 4)) % 4;
+  const opts = Buffer.concat([options, Buffer.alloc(padding)]);
+  const headerLength = 20 + opts.length;
+  const seg = Buffer.alloc(headerLength + payload.length);
   seg.writeUInt16BE(sport, 0);
   seg.writeUInt16BE(dport, 2);
   seg.writeUInt32BE(seq >>> 0, 4);
   seg.writeUInt32BE(ack >>> 0, 8);
-  seg[12] = 0x50;
+  seg[12] = (headerLength / 4) << 4;
   seg[13] = flags;
   seg.writeUInt16BE(window, 14);
-  payload.copy(seg, 20);
+  opts.copy(seg, 20);
+  payload.copy(seg, headerLength);
   seg.writeUInt16BE(l4Checksum(ip(src), ip(dst), 6, seg), 16);
   return ipv4(src, dst, 6, seg);
 }
+
+/** A no-op for alignment, then the window scale shift. */
+const windowScale = (shift) => Buffer.from([1, 3, 3, shift]);
 
 function arp(op, senderMac, senderIp, targetMac, targetIp) {
   const body = Buffer.alloc(28);
@@ -685,6 +694,64 @@ scenario(
     ];
   })(),
   [{ type: 'dns_error', severity: 'error', confidence: 'confirmed', note: 'rcode 3 over TCP, with the two-byte length prefix the transport adds' }],
+);
+
+// 20. A transfer the receiver keeps having to stop.
+//
+//     Nothing is lost here and nothing is resent: the receiving end simply
+//     runs out of room and says so, and the sender does as it is told. To
+//     whoever is watching the progress bar, this is a transfer that freezes
+//     for half a second and then carries on, and no amount of looking at
+//     the network will explain it - the answer is in the program at the
+//     receiving end.
+scenario(
+  'tcp-zero-window.pcap',
+  'A receiver that runs out of buffer and tells the sender to stop.',
+  (() => {
+    const packets = [];
+    let micros = 0;
+    const payload = Buffer.alloc(1460, 0x6b);
+    const seqOf = (n) => 1 + n * 1460;
+
+    const fromClient = (opts) => ethernet(MAC.server, MAC.laptop, 0x0800, tcp(IP.laptop, IP.server, 51560, 445, opts));
+    const fromServer = (opts) => ethernet(MAC.laptop, MAC.server, 0x0800, tcp(IP.server, IP.laptop, 445, 51560, opts));
+
+    // The handshake, where the window scale is agreed. Without these two
+    // packets every window below would be uninterpretable.
+    packets.push({ micros, bytes: fromClient({ seq: 0, flags: FLAGS.SYN, window: 64240, options: windowScale(7) }) });
+    micros += 900;
+    packets.push({ micros, bytes: fromServer({ seq: 0, ack: 1, flags: FLAGS.SYN | FLAGS.ACK, window: 64240, options: windowScale(7) }) });
+    micros += 300;
+    packets.push({ micros, bytes: fromClient({ seq: 1, ack: 1, flags: FLAGS.ACK }) });
+
+    // Eight segments out, with the receiver's room shrinking each time.
+    const windows = [32000, 16000, 8000, 4000, 2000, 1000, 500, 0];
+    for (let i = 0; i < windows.length; i += 1) {
+      micros += 1_100;
+      packets.push({ micros, bytes: fromClient({ seq: seqOf(i), ack: 1, flags: FLAGS.PSH | FLAGS.ACK, payload }) });
+      micros += 350;
+      packets.push({ micros, bytes: fromServer({ seq: 1, ack: seqOf(i + 1), flags: FLAGS.ACK, window: windows[i] }) });
+    }
+
+    // Four more acknowledgements saying the same thing: still no room.
+    // Nothing goes out in this gap, which is the stall.
+    for (let i = 0; i < 4; i += 1) {
+      micros += 100_000;
+      packets.push({ micros, bytes: fromServer({ seq: 1, ack: seqOf(8), flags: FLAGS.ACK, window: 0 }) });
+    }
+
+    // Then the program at the far end reads, and the transfer carries on.
+    micros += 60_000;
+    packets.push({ micros, bytes: fromServer({ seq: 1, ack: seqOf(8), flags: FLAGS.ACK, window: 32000 }) });
+    for (let i = 8; i < 10; i += 1) {
+      micros += 1_100;
+      packets.push({ micros, bytes: fromClient({ seq: seqOf(i), ack: 1, flags: FLAGS.PSH | FLAGS.ACK, payload }) });
+      micros += 350;
+      packets.push({ micros, bytes: fromServer({ seq: 1, ack: seqOf(i + 1), flags: FLAGS.ACK, window: 30000 }) });
+    }
+    return packets;
+  })(),
+  [{ type: 'zero_window', severity: 'warning', confidence: 'confirmed', note: 'The server advertises a window of zero five times across about 460 ms, then reopens it. No loss and no retransmission.' }],
 );
 
 // ------------------------------------------------------------------ writing

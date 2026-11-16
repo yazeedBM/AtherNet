@@ -41,7 +41,7 @@ pub mod summary;
 
 pub use assistant::{answer, check_citations, evidence_pack, PrivacyMode, Redactor};
 pub use capture::{CaptureError, CaptureFile, Format, LinkType, PacketRef};
-pub use decode::{decode, Decoded, NetLayer, TransportLayer, TCP_ACK, TCP_FIN, TCP_RST, TCP_SYN};
+pub use decode::{decode, Decoded, NetLayer, TcpOptions, TransportLayer, TCP_ACK, TCP_FIN, TCP_RST, TCP_SYN};
 pub use detect::{Analysis, CaptureLimits};
 pub use export::{export, ExportFormat};
 pub use filter::Filter;

@@ -304,6 +304,21 @@
           "note": "rcode 3 over TCP, with the two-byte length prefix the transport adds"
         }
       ]
+    },
+    {
+      "file": "tcp-zero-window.pcap",
+      "description": "A receiver that runs out of buffer and tells the sender to stop.",
+      "packets": 28,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "zero_window",
+          "severity": "warning",
+          "confidence": "confirmed",
+          "note": "The server advertises a window of zero five times across about 460 ms, then reopens it. No loss and no retransmission."
+        }
+      ]
     }
   ]
 }
