@@ -678,3 +678,10 @@ h3 {
     border-bottom: 1px solid var(--line);
   }
 }
+
+.chip-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  margin: 0 2px;
+}

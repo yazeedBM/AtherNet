@@ -28,6 +28,54 @@ import {
 
 const PAGE = 100;
 
+/**
+ * A column header that sorts.
+ *
+ * `aria-sort` is the part that is easy to leave out and the part a screen
+ * reader needs: without it the header is a button that appears to do
+ * nothing.
+ */
+function SortHeader<K extends string>({
+  label,
+  column,
+  sort,
+  onSort,
+  numeric,
+}: {
+  label: string;
+  column: K;
+  sort: { key: K; desc: boolean };
+  onSort: (key: K) => void;
+  numeric?: boolean;
+}) {
+  const active = sort.key === column;
+  return (
+    <th
+      className={numeric ? 'num' : undefined}
+      aria-sort={active ? (sort.desc ? 'descending' : 'ascending') : 'none'}
+    >
+      <button type="button" className="sort-header" onClick={() => onSort(column)}>
+        {label}
+        <span className="sort-mark" aria-hidden="true">
+          {active ? (sort.desc ? '\u25be' : '\u25b4') : ''}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+function useSort<K extends string>(initial: K) {
+  const [sort, setSort] = useState<{ key: K; desc: boolean }>({ key: initial, desc: true });
+  const onSort = (key: K) =>
+    // Clicking the column already sorted reverses it; a different column
+    // starts descending, which is what people expect from a size column and
+    // tolerate everywhere else.
+    setSort((current) => (current.key === key ? { key, desc: !current.desc } : { key, desc: true }));
+  return { sort, onSort };
+}
+
+type ConversationColumn = 'conversation' | 'packets' | 'bytes' | 'duration' | 'outcome';
+
 export function ConversationList({
   capture,
   onShowPackets,
@@ -35,6 +83,31 @@ export function ConversationList({
   capture: Capture;
   onShowPackets: (firstPacket: number) => void;
 }) {
+  const { sort, onSort } = useSort<ConversationColumn>('bytes');
+  const [text, setText] = useState('');
+
+  const rows = useMemo(() => {
+    const needle = text.trim().toLowerCase();
+    const matching = capture.conversations.filter(
+      (c) => !needle || conversationLabel(c).toLowerCase().includes(needle) || c.outcome.includes(needle),
+    );
+    const sorted = [...matching].sort((a, b) => {
+      switch (sort.key) {
+        case 'packets':
+          return a.packets - b.packets;
+        case 'bytes':
+          return a.bytes - b.bytes;
+        case 'duration':
+          return a.durationSeconds - b.durationSeconds;
+        case 'outcome':
+          return a.outcome.localeCompare(b.outcome);
+        default:
+          return conversationLabel(a).localeCompare(conversationLabel(b));
+      }
+    });
+    return sort.desc ? sorted.reverse() : sorted;
+  }, [capture.conversations, sort, text]);
+
   if (capture.conversations.length === 0) {
     return (
       <p className="muted empty-note">
@@ -43,28 +116,36 @@ export function ConversationList({
       </p>
     );
   }
+
   return (
     <>
-      <p className="muted empty-note">
-        {capture.conversationCount.toLocaleString()}{' '}
-        {capture.conversationCount === 1 ? 'conversation' : 'conversations'}, busiest first
-        {capture.conversationCount > capture.conversations.length &&
-          ` - showing the first ${capture.conversations.length}`}
-        .
-      </p>
+      <div className="table-bar">
+        <input
+          className="search small"
+          type="search"
+          value={text}
+          placeholder="Filter conversations by address, port or outcome"
+          onChange={(e) => setText(e.target.value)}
+        />
+        <span className="muted">
+          {rows.length.toLocaleString()} of {capture.conversationCount.toLocaleString()}
+          {capture.conversationCount > capture.conversations.length &&
+            ` - the first ${capture.conversations.length} by size are listed`}
+        </span>
+      </div>
       <table className="grid">
         <thead>
           <tr>
-            <th>Conversation</th>
-            <th className="num">Packets</th>
-            <th className="num">Bytes</th>
-            <th className="num">Duration</th>
-            <th>How it ended</th>
+            <SortHeader label="Conversation" column="conversation" sort={sort} onSort={onSort} />
+            <SortHeader label="Packets" column="packets" sort={sort} onSort={onSort} numeric />
+            <SortHeader label="Bytes" column="bytes" sort={sort} onSort={onSort} numeric />
+            <SortHeader label="Duration" column="duration" sort={sort} onSort={onSort} numeric />
+            <SortHeader label="How it ended" column="outcome" sort={sort} onSort={onSort} />
             <th />
           </tr>
         </thead>
         <tbody>
-          {capture.conversations.map((c: Conversation) => (
+          {rows.map((c: Conversation) => (
             <tr key={c.firstPacket}>
               <td className="mono">{conversationLabel(c)}</td>
               <td className="num">{c.packets.toLocaleString()}</td>
@@ -83,10 +164,16 @@ export function ConversationList({
           ))}
         </tbody>
       </table>
+      {rows.length === 0 && (
+        <p className="muted empty-note">
+          No conversation matches that. Clear the box to see them all.
+        </p>
+      )}
     </>
   );
 }
 
+type AddressColumn = 'address' | 'mac' | 'evidence' | 'firstSeen' | 'observations';
 
 /**
  * What the capture proves about which hardware address holds which address.
@@ -98,6 +185,35 @@ export function ConversationList({
  * that was never there.
  */
 export function AddressingTable({ capture }: { capture: Capture }) {
+  const { sort, onSort } = useSort<AddressColumn>('address');
+  const [text, setText] = useState('');
+
+  const rows = useMemo(() => {
+    const needle = text.trim().toLowerCase();
+    const matching = capture.bindings.filter(
+      (b) =>
+        !needle ||
+        b.address.toLowerCase().includes(needle) ||
+        b.mac.toLowerCase().includes(needle) ||
+        b.evidence.toLowerCase().includes(needle),
+    );
+    const sorted = [...matching].sort((a, b) => {
+      switch (sort.key) {
+        case 'mac':
+          return a.mac.localeCompare(b.mac);
+        case 'evidence':
+          return a.evidence.localeCompare(b.evidence);
+        case 'firstSeen':
+          return a.firstSeenUnixMs - b.firstSeenUnixMs;
+        case 'observations':
+          return a.observations - b.observations;
+        default:
+          return a.address.localeCompare(b.address, undefined, { numeric: true });
+      }
+    });
+    return sort.desc && sort.key !== 'address' ? sorted.reverse() : sorted;
+  }, [capture.bindings, sort, text]);
+
   if (capture.bindings.length === 0 && capture.nextHops.length === 0) {
     return (
       <p className="muted empty-note">
@@ -111,6 +227,18 @@ export function AddressingTable({ capture }: { capture: Capture }) {
     <>
       {capture.bindings.length > 0 && (
         <>
+          <div className="table-bar">
+            <input
+              className="search small"
+              type="search"
+              value={text}
+              placeholder="Filter by address, hardware address or evidence"
+              onChange={(e) => setText(e.target.value)}
+            />
+            <span className="muted">
+              {rows.length.toLocaleString()} of {capture.bindings.length.toLocaleString()}
+            </span>
+          </div>
           <p className="muted empty-note">
             Every row is something the capture shows outright. An address not listed here was never claimed
             in front of this capture point, which is not the same as it not existing.
@@ -118,17 +246,17 @@ export function AddressingTable({ capture }: { capture: Capture }) {
           <table className="grid">
             <thead>
               <tr>
-                <th>Address</th>
-                <th>Hardware address</th>
-                <th>What proves it</th>
-                <th>First seen</th>
+                <SortHeader label="Address" column="address" sort={sort} onSort={onSort} />
+                <SortHeader label="Hardware address" column="mac" sort={sort} onSort={onSort} />
+                <SortHeader label="What proves it" column="evidence" sort={sort} onSort={onSort} />
+                <SortHeader label="First seen" column="firstSeen" sort={sort} onSort={onSort} />
                 <th>Last seen</th>
-                <th className="num">Times</th>
+                <SortHeader label="Times" column="observations" sort={sort} onSort={onSort} numeric />
                 <th>That hardware address looks like</th>
               </tr>
             </thead>
             <tbody>
-              {capture.bindings.map((binding) => (
+              {rows.map((binding) => (
                 <tr key={`${binding.address}-${binding.mac}`}>
                   <td className="mono">{binding.address}</td>
                   <td className="mono">{binding.mac}</td>
@@ -148,6 +276,9 @@ export function AddressingTable({ capture }: { capture: Capture }) {
               ))}
             </tbody>
           </table>
+          {rows.length === 0 && (
+            <p className="muted empty-note">No address matches that. Clear the box to see them all.</p>
+          )}
         </>
       )}
 
@@ -184,8 +315,7 @@ export function AddressingTable({ capture }: { capture: Capture }) {
       )}
 
       <p className="muted empty-note">
-        Times are from the capture's own clock, which started{' '}
-        {formatTime(capture.startedAtUnixMs)}.
+        Times are from the capture's own clock, which started {formatTime(capture.startedAtUnixMs)}.
       </p>
     </>
   );

@@ -73,7 +73,7 @@ around 2 GB is the ceiling for a single capture here.
 ## The analysis core
 
 ```bash
-cargo test --workspace --exclude athernet-app   # 56 tests + a doc test
+cargo test --workspace --exclude athernet-app   # 59 tests + a doc test
 cargo build --release -p athernet-core --bin athernet-bench
 ./target/release/athernet-bench fixtures/       # findings, and the throughput gate
 ./target/release/athernet-bench --assistant fixtures/   # the assistant gates
@@ -88,23 +88,22 @@ architecture rests on.
 **Measured, 16 November 2026**, on one core of a Windows 11 laptop, GNU
 toolchain, release build, files already in the page cache:
 
-    bulk-transfer.pcap   66-107 M packets/minute, six consecutive runs
-    the whole corpus     72-91 M packets/minute, six consecutive runs
+    the whole corpus     50-81 M packets/minute, four consecutive runs
 
 The spread is the machine, not the code. This is a laptop with other things
 running on it, and a single quiet reading earlier in the same session put the
 corpus at 99-102 M. Quoting the best number would have been easy and wrong;
 the range is what the thing actually does.
 
-Throughput has come down twice, and both drops are worth stating rather than
-hiding. The packet index took it from 180-186 M to 148-152 M: a row per
-packet is what an explorer costs. Profiling hardware addresses cost roughly
-another tenth, because that meant a set lookup per packet on top - first
-measured around 90 M, recovered by remembering the last address seen behind
-each hardware address, since almost every packet repeats the pair before it.
+Throughput has come down three times as the analysis grew, and each drop is
+worth stating rather than hiding. The packet index took it from 180-186 M to
+148-152 M: a row per packet is what an explorer costs. Profiling hardware
+addresses cost roughly another tenth - a set lookup per packet - recovered
+in part by remembering the last address seen behind each one, since almost
+every packet repeats the pair before it. Tracking resent data cost the rest.
 
-The gate is a million packets a minute. The worst reading here is seventy
-times that, and reading has never been where the time goes.
+The gate is a million packets a minute. The worst reading here is fifty times
+that, and reading has never been where the time goes.
 
 Read those as an upper bound, for two reasons. That file is one conversation,
 so the flow table stays in cache and every branch predicts perfectly; a real
@@ -187,6 +186,38 @@ the detector to judge; the detector then did not judge it, and reported every
 address with two claims as a duplicate. On a real network with DHCP that
 fires constantly. `fixtures/address-reassigned.pcap` is the file that now
 holds it down.
+
+### Resent data, and the thing that imitates it
+
+TCP resends data it believes was lost, so a few retransmissions are normal
+everywhere and are how the protocol copes. The detector reports a direction
+only when the rate passes 2% and there are at least five of them, because two
+resends out of six is noise rather than a rate.
+
+It is reported as **suspected**, not confirmed, and the reason is in the
+finding: *a segment that arrived out of order looks exactly like one that was
+sent again, from a single capture point*. The count includes both, and saying
+so is cheaper than pretending to a precision one capture point cannot have.
+
+The trap next to this is the reason `mirrored-port-duplicates.pcap` exists. A
+mirrored switch port that copies both directions of a link to the same place
+delivers every frame twice. A detector that counts those as retransmissions
+reports loss that is not on the wire at all - a network problem that exists
+only in the capture rig. Two segments with the same sequence number and
+length less than a millisecond apart are separated out before anything is
+counted: no sender retransmits that fast, because the quickest real resend
+waits for three duplicate acknowledgements to arrive first. They are then
+reported in their own right, because a capture that doubles its own packets
+is worth knowing about before anybody trusts a number taken from it.
+
+That fixture produces the duplicate finding and **no retransmission finding
+at all**, and the corpus gate holds it there. `bulk-transfer.pcap`, fifty
+thousand sequential segments, stays silent.
+
+Sequence numbers wrap, so they are compared by the sign of the difference
+rather than by size. A connection that has moved four gigabytes has wrapped,
+and a comparison that forgot would report that it resent everything after
+that point. There is a test for it.
 
 ### The filter
 
@@ -355,7 +386,7 @@ would have leaked on the last line.
 
 ## The labelled corpus
 
-`fixtures/manifest.json` lists all sixteen generated captures with the
+`fixtures/manifest.json` lists all nineteen generated captures with the
 findings each one should produce - type, severity, confidence, and a note on
 why. `node tools/check-corpus.mjs` compares the two and exits non-zero on any
 mismatch, so this is a gate rather than a document.
@@ -451,7 +482,7 @@ test capture unaided. Until somebody does that, the claim that this is easier
 to understand than a packet list is an intention rather than a result.
 
 Steps 1 and 2 are **done and passed**: the throughput gate by measurement, the
-corpus gate by `node tools/check-corpus.mjs`, which matches all sixteen
+corpus gate by `node tools/check-corpus.mjs`, which matches all nineteen
 captures with no false positives on the clean two.
 
 Step 3 works end to end for a capture you open yourself. The dashboard, the
@@ -460,10 +491,11 @@ evidence, the limits behind a confidence badge, and a traffic strip that
 rebuckets itself as a capture gets longer and says what one bar covers.
 
 Step 4 has its conversation list, its packet explorer, its addressing screen
-and the filter builder with saved filters and shortcuts. What it has not got
-is sorting and searching inside the conversation and addressing tables, and
-the filter applies to packets only, not to the issues list, which still has
-its three chips and a text box.
+and the filter builder with saved filters and shortcuts. The conversation and
+addressing tables sort and search, and the issues list can now be filtered by
+confidence as well as severity - which it could not be for most of this
+project's life, despite the two axes being the thing the whole design rests
+on.
 
 Its gate - someone who has never used Wireshark names the problem in a test
 capture unaided - has not been attempted. Nobody has sat in front of this, and
@@ -476,12 +508,12 @@ it:
   thrown away. Nothing survives a reload, and the explorer re-reads a capture
   each time you open its packets rather than keeping the index between
   visits.
-- **Retransmission and window analysis**, which needs sequence-number
-  tracking per direction rather than per-packet flags. It is also where false
-  positives are easiest to create, so it wants its own fixtures first:
-  checksum offload and a mirrored port both manufacture duplicates that were
-  never on the wire.
-- **DNS over TCP**, and DNS over TLS or HTTPS, which this cannot see at all.
+- **Window analysis.** Resent data is detected; zero windows, window scaling
+  and the stalls they cause are not. That needs the options parsed out of the
+  TCP header, which the decoder currently steps over.
+- **DNS over TLS and HTTPS**, which are encrypted and invisible here by
+  design. Plain DNS over TCP - what a resolver falls back to when an answer
+  is too big for UDP - is read, length prefix and all.
 - **Fixtures taken from real captures.** Every file in the corpus was written
   by hand, which is why the expected result is known exactly - and also why it
   cannot catch whatever real traffic does that nobody thought to write down.

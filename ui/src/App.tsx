@@ -17,6 +17,7 @@ import {
   type Capture,
   type Finding,
   type Severity,
+  type Confidence,
   formatBytes,
   formatDuration,
   formatTime,
@@ -38,12 +39,21 @@ const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2
 interface Filter {
   captureId: string;
   severities: Severity[];
+  /// The axis the whole design rests on, and for a long time the one thing
+  /// the issues list could not be filtered by.
+  confidences: Confidence[];
   text: string;
   /** Matches the start of a finding's kind, e.g. "dns" for dns_error. */
   kindPrefix: string;
 }
 
-const EMPTY_FILTER: Filter = { captureId: 'all', severities: [], text: '', kindPrefix: '' };
+const EMPTY_FILTER: Filter = {
+  captureId: 'all',
+  severities: [],
+  confidences: [],
+  text: '',
+  kindPrefix: '',
+};
 
 export function App() {
   // Captures are whatever has been opened in this session. The app starts
@@ -173,6 +183,10 @@ export function App() {
     return visibleCaptures
       .flatMap((capture) => capture.findings.map((finding) => ({ capture, finding })))
       .filter(({ finding }) => filter.severities.length === 0 || filter.severities.includes(finding.severity))
+      .filter(
+        ({ finding }) =>
+          filter.confidences.length === 0 || filter.confidences.includes(finding.confidence),
+      )
       .filter(({ finding }) => !filter.kindPrefix || finding.kind.startsWith(filter.kindPrefix))
       .filter(({ finding, capture }) => {
         if (!text) return true;
@@ -182,7 +196,7 @@ export function App() {
         return haystack.includes(text);
       })
       .sort((a, b) => SEVERITY_ORDER[a.finding.severity] - SEVERITY_ORDER[b.finding.severity]);
-  }, [visibleCaptures, filter.severities, filter.text, filter.kindPrefix]);
+  }, [visibleCaptures, filter.severities, filter.confidences, filter.text, filter.kindPrefix]);
 
   const totals = useMemo(() => {
     const packets = visibleCaptures.reduce((sum, c) => sum + c.packets, 0);
@@ -202,6 +216,15 @@ export function App() {
       severities: f.severities.includes(severity)
         ? f.severities.filter((s) => s !== severity)
         : [...f.severities, severity],
+    }));
+  }
+
+  function toggleConfidence(confidence: Confidence) {
+    setFilter((f) => ({
+      ...f,
+      confidences: f.confidences.includes(confidence)
+        ? f.confidences.filter((c) => c !== confidence)
+        : [...f.confidences, confidence],
     }));
   }
 
@@ -367,6 +390,24 @@ export function App() {
                 {SEVERITY_LABEL[severity]}
               </button>
             ))}
+            <span className="chip-divider" aria-hidden="true" />
+            {/* Severity says how much it matters; confidence says how sure
+                the evidence makes us. Being able to ask for "only the things
+                a packet states outright" is the whole point of keeping them
+                apart, and for a long time there was no way to ask. */}
+            {(['confirmed', 'suspected', 'incomplete'] as Confidence[]).map((confidence) => (
+              <button
+                type="button"
+                key={confidence}
+                className={`chip ${filter.confidences.includes(confidence) ? 'is-on' : ''}`}
+                aria-pressed={filter.confidences.includes(confidence)}
+                title={CONFIDENCE_HELP[confidence]}
+                onClick={() => toggleConfidence(confidence)}
+              >
+                {CONFIDENCE_LABEL[confidence]}
+              </button>
+            ))}
+            <span className="chip-divider" aria-hidden="true" />
             {/* A shortcut filters on the finding kind, not on the words in
                 it. Searching for "dns" as text also matched a snaplen notice
                 whose explanation happens to mention the DNS checks. */}

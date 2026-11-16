@@ -591,6 +591,102 @@ scenario(
   [{ type: 'address_moved', severity: 'info', confidence: 'confirmed', note: '192.168.1.60 moved from 02:00:00:00:00:20 to 02:00:00:00:00:66 after 45 s, with no overlap' }],
 );
 
+// 17. A transfer that keeps having to repeat itself.
+scenario(
+  'tcp-retransmissions.pcap',
+  'A file transfer where a fifth of the data has to be sent twice.',
+  (() => {
+    const packets = [];
+    let micros = 0;
+    const payload = Buffer.alloc(1460, 0x7e);
+    const seqOf = (n) => 1 + n * 1460;
+
+    packets.push({ micros, bytes: ethernet(MAC.server, MAC.laptop, 0x0800, tcp(IP.laptop, IP.server, 51540, 445, { seq: 0, flags: FLAGS.SYN })) });
+    micros += 900;
+    packets.push({ micros, bytes: ethernet(MAC.laptop, MAC.server, 0x0800, tcp(IP.server, IP.laptop, 445, 51540, { seq: 0, ack: 1, flags: FLAGS.SYN | FLAGS.ACK })) });
+    micros += 300;
+    packets.push({ micros, bytes: ethernet(MAC.server, MAC.laptop, 0x0800, tcp(IP.laptop, IP.server, 51540, 445, { seq: 1, ack: 1, flags: FLAGS.ACK })) });
+
+    // Twenty segments out, with an acknowledgement for each.
+    for (let i = 0; i < 20; i += 1) {
+      micros += 1_200;
+      packets.push({ micros, bytes: ethernet(MAC.server, MAC.laptop, 0x0800, tcp(IP.laptop, IP.server, 51540, 445, { seq: seqOf(i), ack: 1, flags: FLAGS.PSH | FLAGS.ACK, payload })) });
+      micros += 400;
+      packets.push({ micros, bytes: ethernet(MAC.laptop, MAC.server, 0x0800, tcp(IP.server, IP.laptop, 445, 51540, { seq: 1, ack: seqOf(i + 1), flags: FLAGS.ACK })) });
+    }
+
+    // Six of them never arrived, so they go again a third of a second later.
+    // Same sequence numbers, same lengths - which is what makes them
+    // retransmissions rather than new data.
+    for (const i of [3, 7, 8, 12, 15, 18]) {
+      micros += 330_000;
+      packets.push({ micros, bytes: ethernet(MAC.server, MAC.laptop, 0x0800, tcp(IP.laptop, IP.server, 51540, 445, { seq: seqOf(i), ack: 1, flags: FLAGS.PSH | FLAGS.ACK, payload })) });
+    }
+    return packets;
+  })(),
+  [{ type: 'retransmissions', severity: 'warning', confidence: 'suspected', note: '6 of 26 data segments repeated data already sent; out-of-order delivery looks the same from one capture point, which is why it is not confirmed' }],
+);
+
+// 18. The capture artefact that imitates the file above.
+//
+//     A mirrored switch port that copies both directions of a link to the
+//     same place delivers every frame twice. A detector that counts those as
+//     retransmissions reports loss that is not on the wire at all - which is
+//     the exact false positive this fixture exists to hold down.
+scenario(
+  'mirrored-port-duplicates.pcap',
+  'Every frame recorded twice, microseconds apart, by a mirror copying both directions to one port.',
+  (() => {
+    const packets = [];
+    let micros = 0;
+    const payload = Buffer.alloc(1460, 0x3c);
+
+    // Each frame is pushed, then pushed again 40 microseconds later: the
+    // same bytes, not a resend. No sender retransmits that fast.
+    const twice = (bytes) => {
+      packets.push({ micros, bytes });
+      micros += 40;
+      packets.push({ micros, bytes });
+      micros += 1_100;
+    };
+
+    twice(ethernet(MAC.server, MAC.laptop, 0x0800, tcp(IP.laptop, IP.server, 51541, 445, { seq: 0, flags: FLAGS.SYN })));
+    twice(ethernet(MAC.laptop, MAC.server, 0x0800, tcp(IP.server, IP.laptop, 445, 51541, { seq: 0, ack: 1, flags: FLAGS.SYN | FLAGS.ACK })));
+    twice(ethernet(MAC.server, MAC.laptop, 0x0800, tcp(IP.laptop, IP.server, 51541, 445, { seq: 1, ack: 1, flags: FLAGS.ACK })));
+    for (let i = 0; i < 10; i += 1) {
+      twice(ethernet(MAC.server, MAC.laptop, 0x0800, tcp(IP.laptop, IP.server, 51541, 445, { seq: 1 + i * 1460, ack: 1, flags: FLAGS.PSH | FLAGS.ACK, payload })));
+      twice(ethernet(MAC.laptop, MAC.server, 0x0800, tcp(IP.server, IP.laptop, 445, 51541, { seq: 1, ack: 1 + (i + 1) * 1460, flags: FLAGS.ACK })));
+    }
+    return packets;
+  })(),
+  [{ type: 'capture_duplicates', severity: 'info', confidence: 'confirmed', note: 'Ten data segments recorded twice. No retransmission finding may appear on this file.' }],
+);
+
+// 19. The same lookup, over TCP. Resolvers fall back to it when an answer
+//     is too big for UDP, and a tool that only watches port 53 on UDP sees
+//     a connection carrying nothing it understands.
+scenario(
+  'dns-over-tcp.pcap',
+  'A name lookup carried over TCP, answered with NXDOMAIN.',
+  (() => {
+    // Over TCP a DNS message is prefixed with its own length.
+    const framed = (message) => {
+      const prefix = Buffer.alloc(2);
+      prefix.writeUInt16BE(message.length, 0);
+      return Buffer.concat([prefix, message]);
+    };
+    const name = 'archive.corp.example';
+    return [
+      { micros: 0, bytes: ethernet(MAC.router, MAC.laptop, 0x0800, tcp(IP.laptop, IP.resolver, 51550, 53, { seq: 0, flags: FLAGS.SYN })) },
+      { micros: 800, bytes: ethernet(MAC.laptop, MAC.router, 0x0800, tcp(IP.resolver, IP.laptop, 53, 51550, { seq: 0, ack: 1, flags: FLAGS.SYN | FLAGS.ACK })) },
+      { micros: 1_000, bytes: ethernet(MAC.router, MAC.laptop, 0x0800, tcp(IP.laptop, IP.resolver, 51550, 53, { seq: 1, ack: 1, flags: FLAGS.ACK })) },
+      { micros: 1_400, bytes: ethernet(MAC.router, MAC.laptop, 0x0800, tcp(IP.laptop, IP.resolver, 51550, 53, { seq: 1, ack: 1, flags: FLAGS.PSH | FLAGS.ACK, payload: framed(dnsQuery(0x4d2e, name)) })) },
+      { micros: 14_000, bytes: ethernet(MAC.laptop, MAC.router, 0x0800, tcp(IP.resolver, IP.laptop, 53, 51550, { seq: 1, ack: 50, flags: FLAGS.PSH | FLAGS.ACK, payload: framed(dnsResponse(0x4d2e, name, { rcode: 3 })) })) },
+    ];
+  })(),
+  [{ type: 'dns_error', severity: 'error', confidence: 'confirmed', note: 'rcode 3 over TCP, with the two-byte length prefix the transport adds' }],
+);
+
 // ------------------------------------------------------------------ writing
 
 mkdirSync(outDir, { recursive: true });

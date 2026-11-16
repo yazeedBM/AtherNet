@@ -34,6 +34,17 @@ pub struct CaptureLimits {
     pub snaplen: u32,
 }
 
+/// Below this many resent segments, a conversation is too small to say
+/// anything about: two resends out of six is noise, not a rate.
+const RESEND_MIN_COUNT: u64 = 5;
+
+/// Retransmission is how TCP copes with an imperfect network, and a small
+/// share of it is normal everywhere. This is where it stops being normal.
+const RESEND_MIN_RATE: f64 = 0.02;
+
+/// Below this, duplicated frames are not worth a finding of their own.
+const CAPTURE_DUPLICATE_MIN: u64 = 5;
+
 // ------------------------------------------------------------ bookkeeping
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -41,6 +52,10 @@ struct DnsKey {
     client: Addr,
     server: Addr,
     id: u16,
+    /// 17 for the usual UDP, 6 when the lookup went over TCP. Two exchanges
+    /// can share an identifier across the two, and merging them would have
+    /// one answering the other.
+    proto: u8,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -171,7 +186,8 @@ impl Analysis {
                 }) => {
                     if let Some(body) = payload {
                         if src_port == 53 || dst_port == 53 {
-                            note = self.observe_dns(packet, src, dst, src_port, dst_port, body);
+                            note =
+                                self.observe_dns(packet, src, dst, src_port, dst_port, body, 17);
                         } else if matches!(src_port, 67 | 68) && matches!(dst_port, 67 | 68) {
                             note = self.observe_dhcp(packet, body);
                         }
@@ -181,7 +197,12 @@ impl Analysis {
                     src_port, dst_port, ..
                 }) => {
                     if let Some(body) = payload {
-                        note = self.observe_tls(packet, src, dst, src_port, dst_port, body);
+                        if src_port == 53 || dst_port == 53 {
+                            note = self
+                                .observe_dns_over_tcp(packet, src, dst, src_port, dst_port, body);
+                        } else {
+                            note = self.observe_tls(packet, src, dst, src_port, dst_port, body);
+                        }
                     }
                 }
                 Some(TransportLayer::Icmp { kind, code }) => {
@@ -197,6 +218,46 @@ impl Analysis {
         self.packets.record(packet, decoded, note);
     }
 
+    /// A lookup that went over TCP instead of UDP.
+    ///
+    /// Big answers, zone transfers and anything a resolver retried after a
+    /// truncated UDP reply arrive this way. The message is the same; only
+    /// the framing differs, and it carries its own length in front.
+    ///
+    /// A long answer can be split across segments, and a segment that holds
+    /// only part of a message is left alone rather than guessed at - half a
+    /// DNS message parsed optimistically is how a detector invents a name
+    /// nobody asked for.
+    #[allow(clippy::too_many_arguments)]
+    fn observe_dns_over_tcp(
+        &mut self,
+        packet: &PacketRef<'_>,
+        src: Addr,
+        dst: Addr,
+        src_port: u16,
+        dst_port: u16,
+        body: &[u8],
+    ) -> Option<(PacketKind, String)> {
+        if body.len() < 2 {
+            return None;
+        }
+        let declared = u16::from_be_bytes([body[0], body[1]]) as usize;
+        // Shorter than a header, or longer than what this segment holds.
+        if declared < 12 || 2 + declared > body.len() {
+            return None;
+        }
+        self.observe_dns(
+            packet,
+            src,
+            dst,
+            src_port,
+            dst_port,
+            &body[2..2 + declared],
+            6,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn observe_dns(
         &mut self,
         packet: &PacketRef<'_>,
@@ -205,6 +266,7 @@ impl Analysis {
         src_port: u16,
         dst_port: u16,
         body: &[u8],
+        proto: u8,
     ) -> Option<(PacketKind, String)> {
         let msg = parse_dns(body)?;
         let display_name = msg
@@ -222,6 +284,7 @@ impl Analysis {
                 client,
                 server,
                 id: msg.id,
+                proto,
             })
             .or_insert_with(|| DnsExchange {
                 name: None,
@@ -439,6 +502,7 @@ impl Analysis {
         self.dhcp_findings(&mut out, &limits);
         self.tls_findings(&mut out, &mut spoken_for, &limits);
         self.flow_findings(&mut out, &spoken_for, &limits);
+        self.tcp_health_findings(&mut out);
         self.addressing_findings(&mut out);
         self.capture_findings(&mut out, &limits);
 
@@ -519,7 +583,8 @@ impl Analysis {
         limits: &CaptureLimits,
     ) {
         for (key, exchange) in &self.dns {
-            let flow_key = FlowKey::new(17, key.client, exchange.client_port, key.server, 53).0;
+            let flow_key =
+                FlowKey::new(key.proto, key.client, exchange.client_port, key.server, 53).0;
             let before = out.len();
 
             let name = exchange
@@ -923,6 +988,95 @@ impl Analysis {
                 finding
                     .at(stats.first_packet, stats.first_ts)
                     .between(vec![key.a.to_string(), format!("{}:{}", key.b, key.b_port)]),
+            );
+        }
+    }
+
+    /// Resent data, and the capture artefact that imitates it.
+    ///
+    /// These two have to be read together. A mirrored switch port delivers
+    /// every frame twice, and a detector that counts those as retransmissions
+    /// reports a network problem that exists only in the capture rig. The
+    /// duplicates are separated out before anything is counted, and then
+    /// reported in their own right - because a capture that doubles its own
+    /// packets is worth knowing about before anyone trusts a number from it.
+    fn tcp_health_findings(&self, out: &mut Vec<Finding>) {
+        let mut flows: Vec<(FlowKey, crate::flow::FlowStats)> =
+            self.summary.flows.iter().map(|(k, v)| (*k, *v)).collect();
+        flows.sort_by_key(|(_, stats)| stats.first_packet);
+
+        for (key, stats) in &flows {
+            if key.proto != 6 {
+                continue;
+            }
+            for (which, direction) in stats.tcp.iter().enumerate() {
+                if direction.resent < RESEND_MIN_COUNT {
+                    continue;
+                }
+                let rate = direction.resend_rate();
+                if rate < RESEND_MIN_RATE {
+                    continue;
+                }
+                let (from, to) = if which == 0 {
+                    (key.a, key.b)
+                } else {
+                    (key.b, key.a)
+                };
+                out.push(
+                    Finding::new(
+                        "retransmissions",
+                        Severity::Warning,
+                        // The packets are in the file, so the repetition
+                        // itself is not in doubt. The limit below is what
+                        // brings this down to suspected.
+                        Confidence::Confirmed,
+                        format!(
+                            "{:.0}% of the data from {from} to {to} was sent more than once",
+                            rate * 100.0
+                        ),
+                        format!(
+                            "{} of {} data segments in that direction covered data the sender had already sent. Retransmission is how TCP copes with an imperfect network, so a small share of it is normal everywhere and is not a fault on its own. At this rate something between the two ends is losing data - and this capture shows one point on the path, so it can say that it happened but not where.",
+                            direction.resent, direction.payload_segments
+                        ),
+                    )
+                    .at(stats.first_packet, stats.first_ts)
+                    .between(vec![from.to_string(), format!("{to}:{}", key.b_port)])
+                    .showing(
+                        stats.first_packet,
+                        0,
+                        format!("the start of the conversation, {} packets in total", stats.packets()),
+                    )
+                    .limited_by(vec![
+                        "A segment that arrived out of order looks exactly like one that was sent again, from a single capture point. This count includes both.".to_string(),
+                    ])
+                    .check("Capture at the other end as well: whichever end is missing the data tells you which side of the capture point the loss is on.")
+                    .check("Check the interfaces along the path for errors and discards.")
+                    .check("Check for a duplex mismatch or a failing link if the rate is high and steady."),
+                );
+            }
+        }
+
+        let duplicated: u64 = flows.iter().map(|(_, s)| s.duplicated_by_capture()).sum();
+        if duplicated >= CAPTURE_DUPLICATE_MIN {
+            let first = flows
+                .iter()
+                .find(|(_, s)| s.duplicated_by_capture() > 0)
+                .map(|(_, s)| (s.first_packet, s.first_ts))
+                .unwrap_or((0, 0));
+            out.push(
+                Finding::new(
+                    "capture_duplicates",
+                    Severity::Info,
+                    Confidence::Confirmed,
+                    format!("The capture recorded {duplicated} packets twice"),
+                    format!(
+                        "{duplicated} segments appear twice with the same sequence number and length, less than a millisecond apart. No sender retransmits that fast - the quickest real resend waits for three duplicate acknowledgements to arrive first. This is what a mirrored switch port looks like when it copies both directions of a link to the same place, and it is a property of the capture rather than of the network. They have been left out of the retransmission counts."
+                    ),
+                )
+                .at(first.0, first.1)
+                .showing(first.0, 0, "the first conversation with duplicated frames")
+                .check("Check how the capture was taken. A mirror copying both directions to one port doubles every frame that crosses it.")
+                .check("Any tool that counts retransmissions on this file without allowing for this will report loss that is not there."),
             );
         }
     }

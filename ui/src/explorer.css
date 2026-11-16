@@ -291,3 +291,37 @@
 .export-preview {
   max-height: 52vh;
 }
+
+.table-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.table-bar .search.small {
+  flex: 1;
+  min-width: 220px;
+}
+
+.sort-header {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sort-header:hover {
+  color: var(--accent);
+}
+
+.sort-mark {
+  font-size: 9px;
+  width: 8px;
+}

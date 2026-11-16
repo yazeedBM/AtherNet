@@ -259,6 +259,51 @@
           "note": "192.168.1.60 moved from 02:00:00:00:00:20 to 02:00:00:00:00:66 after 45 s, with no overlap"
         }
       ]
+    },
+    {
+      "file": "tcp-retransmissions.pcap",
+      "description": "A file transfer where a fifth of the data has to be sent twice.",
+      "packets": 49,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "retransmissions",
+          "severity": "warning",
+          "confidence": "suspected",
+          "note": "6 of 26 data segments repeated data already sent; out-of-order delivery looks the same from one capture point, which is why it is not confirmed"
+        }
+      ]
+    },
+    {
+      "file": "mirrored-port-duplicates.pcap",
+      "description": "Every frame recorded twice, microseconds apart, by a mirror copying both directions to one port.",
+      "packets": 46,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "capture_duplicates",
+          "severity": "info",
+          "confidence": "confirmed",
+          "note": "Ten data segments recorded twice. No retransmission finding may appear on this file."
+        }
+      ]
+    },
+    {
+      "file": "dns-over-tcp.pcap",
+      "description": "A name lookup carried over TCP, answered with NXDOMAIN.",
+      "packets": 5,
+      "snaplen": 262144,
+      "reportedDrops": 0,
+      "expect": [
+        {
+          "type": "dns_error",
+          "severity": "error",
+          "confidence": "confirmed",
+          "note": "rcode 3 over TCP, with the two-byte length prefix the transport adds"
+        }
+      ]
     }
   ]
 }

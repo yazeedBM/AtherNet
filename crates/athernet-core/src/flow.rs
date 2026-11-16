@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::decode::{Decoded, NetLayer, TCP_ACK, TCP_FIN, TCP_RST, TCP_SYN};
+use crate::decode::{Decoded, NetLayer, TransportLayer, TCP_ACK, TCP_FIN, TCP_RST, TCP_SYN};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Addr {
@@ -126,6 +126,88 @@ impl FlowOutcome {
     }
 }
 
+/// Is `a` at or before `b` in sequence space?
+///
+/// Sequence numbers wrap, so they are compared by the sign of the
+/// difference rather than by size. A connection that has moved 3 GB has
+/// wrapped, and a comparison that forgot would call every later segment a
+/// retransmission.
+fn seq_at_or_before(a: u32, b: u32) -> bool {
+    (b.wrapping_sub(a) as i32) >= 0
+}
+
+/// One direction of a TCP conversation, as far as resent data goes.
+///
+/// Deliberately tiny - four words and two counters - because this is per
+/// direction per flow, and a capture can hold hundreds of thousands of
+/// flows. Keeping a window of recent segments would be more precise and
+/// would also mean a megabyte of memory for every thousand conversations.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TcpDirection {
+    /// Segments that carried data. Pure acknowledgements say nothing here.
+    pub payload_segments: u64,
+    /// Segments covering data already seen.
+    pub resent: u64,
+    /// Segments the capture itself recorded twice.
+    pub duplicated_by_capture: u64,
+    highest_end: u32,
+    started: bool,
+    last_seq: u32,
+    last_len: u32,
+    last_ts: i64,
+}
+
+/// Two identical segments this close together were recorded twice, not sent
+/// twice: no sender retransmits inside a millisecond.
+const CAPTURE_DUPLICATE_NANOS: i64 = 1_000_000;
+
+impl TcpDirection {
+    fn observe(&mut self, ts: i64, seq: u32, len: u32) {
+        if len == 0 {
+            return;
+        }
+
+        // A mirrored switch port delivers the same frame twice, microseconds
+        // apart. Counting those as retransmissions is the classic way to
+        // report a network problem that only exists in the capture rig. A
+        // sender cannot retransmit that fast: the fastest real resend waits
+        // for three duplicate acknowledgements to arrive first.
+        //
+        // Matching on the IP identification field as well would make this
+        // stronger still; the sequence number, the length and the gap are
+        // enough to be safe without decoding one more field per packet.
+        if self.started
+            && seq == self.last_seq
+            && len == self.last_len
+            && (ts - self.last_ts).abs() < CAPTURE_DUPLICATE_NANOS
+        {
+            self.duplicated_by_capture += 1;
+            return;
+        }
+
+        self.payload_segments += 1;
+        let end = seq.wrapping_add(len);
+        if self.started && seq_at_or_before(end, self.highest_end) {
+            self.resent += 1;
+        } else {
+            self.highest_end = end;
+        }
+        self.started = true;
+        self.last_seq = seq;
+        self.last_len = len;
+        self.last_ts = ts;
+    }
+
+    /// Resent segments as a share of the data segments in this direction.
+    pub fn resend_rate(&self) -> f64 {
+        if self.payload_segments == 0 {
+            0.0
+        } else {
+            self.resent as f64 / self.payload_segments as f64
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct FlowStats {
     pub packets_fwd: u64,
@@ -139,6 +221,8 @@ pub struct FlowStats {
     pub syn_ack: u32,
     pub rst: u32,
     pub fin: u32,
+    /// Resent and duplicated data, forward then reverse.
+    pub tcp: [TcpDirection; 2],
 }
 
 impl FlowStats {
@@ -155,10 +239,12 @@ impl FlowStats {
             syn_ack: 0,
             rst: 0,
             fin: 0,
+            tcp: [TcpDirection::default(); 2],
         }
     }
 
-    fn update(&mut self, ts: i64, forward: bool, wire_len: u32, tcp_flags: u8) {
+    fn update(&mut self, ts: i64, forward: bool, wire_len: u32, decoded: &Decoded) {
+        let tcp_flags = decoded.tcp_flags();
         if forward {
             self.packets_fwd += 1;
             self.bytes_fwd += wire_len as u64;
@@ -187,6 +273,21 @@ impl FlowStats {
                 self.fin += 1;
             }
         }
+
+        if let Some(TransportLayer::Tcp { seq, .. }) = decoded.transport {
+            let len = decoded.payload.map(|(_, len)| len as u32).unwrap_or(0);
+            self.tcp[usize::from(!forward)].observe(ts, seq, len);
+        }
+    }
+
+    /// Data segments across both directions.
+    pub fn payload_segments(&self) -> u64 {
+        self.tcp[0].payload_segments + self.tcp[1].payload_segments
+    }
+
+    /// Segments the capture recorded twice, across both directions.
+    pub fn duplicated_by_capture(&self) -> u64 {
+        self.tcp[0].duplicated_by_capture + self.tcp[1].duplicated_by_capture
     }
 
     pub fn packets(&self) -> u64 {
@@ -279,7 +380,7 @@ impl FlowTable {
             .flows
             .entry(key)
             .or_insert_with(|| FlowStats::new(ts, packet_index));
-        stats.update(ts, forward, wire_len, decoded.tcp_flags());
+        stats.update(ts, forward, wire_len, decoded);
         Some(key)
     }
 
@@ -364,6 +465,78 @@ mod tests {
         assert_eq!(troubled.len(), 1);
         assert_eq!(troubled[0].2, FlowOutcome::Refused);
         assert_eq!(troubled[0].2.confidence(), "confirmed");
+    }
+
+    fn data(src: [u8; 4], sp: u16, dst: [u8; 4], dp: u16, seq: u32, len: usize) -> Decoded {
+        let mut decoded = tcp_packet(src, sp, dst, dp, TCP_ACK);
+        if let Some(TransportLayer::Tcp { seq: s, .. }) = &mut decoded.transport {
+            *s = seq;
+        }
+        // The payload is reported as an offset and a length, never copied.
+        decoded.payload = Some((54, len));
+        decoded
+    }
+
+    #[test]
+    fn data_sent_again_is_counted_and_data_sent_once_is_not() {
+        let mut table = FlowTable::new();
+        let ms = 1_000_000;
+        // Four fresh segments.
+        for i in 0..4u32 {
+            table.observe(
+                i as i64 * 10 * ms,
+                i as u64,
+                &data(CLIENT, 51540, SERVER, 445, 1 + i * 1460, 1460),
+                1514,
+            );
+        }
+        // Then two of them again, a third of a second later.
+        table.observe(400 * ms, 10, &data(CLIENT, 51540, SERVER, 445, 1, 1460), 1514);
+        table.observe(700 * ms, 11, &data(CLIENT, 51540, SERVER, 445, 1461, 1460), 1514);
+
+        let (_, stats) = table.iter().next().unwrap();
+        assert_eq!(stats.tcp[0].payload_segments, 6);
+        assert_eq!(stats.tcp[0].resent, 2);
+        assert_eq!(stats.tcp[0].duplicated_by_capture, 0);
+        assert!((stats.tcp[0].resend_rate() - 2.0 / 6.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_frame_the_capture_recorded_twice_is_not_a_retransmission() {
+        let mut table = FlowTable::new();
+        // The same segment forty microseconds apart, which is what a
+        // mirrored port does and what no sender does.
+        for i in 0..2 {
+            table.observe(
+                i * 40_000,
+                i as u64,
+                &data(CLIENT, 51541, SERVER, 445, 1, 1460),
+                1514,
+            );
+        }
+        let (_, stats) = table.iter().next().unwrap();
+        assert_eq!(stats.tcp[0].duplicated_by_capture, 1);
+        assert_eq!(
+            stats.tcp[0].resent, 0,
+            "a doubled capture must not look like loss on the wire"
+        );
+        assert_eq!(stats.tcp[0].payload_segments, 1);
+    }
+
+    #[test]
+    fn sequence_numbers_that_wrap_do_not_become_retransmissions() {
+        let mut table = FlowTable::new();
+        let ms = 1_000_000;
+        // Just below the wrap, then over it. A size comparison would call
+        // the second segment old data and report a connection that resent
+        // everything after 4 GB.
+        table.observe(0, 0, &data(CLIENT, 51542, SERVER, 445, u32::MAX - 1000, 1000), 1514);
+        table.observe(10 * ms, 1, &data(CLIENT, 51542, SERVER, 445, u32::MAX, 1000), 1514);
+        table.observe(20 * ms, 2, &data(CLIENT, 51542, SERVER, 445, 999, 1000), 1514);
+
+        let (_, stats) = table.iter().next().unwrap();
+        assert_eq!(stats.tcp[0].payload_segments, 3);
+        assert_eq!(stats.tcp[0].resent, 0, "wrapping is not repeating");
     }
 
     #[test]
