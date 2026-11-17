@@ -62,6 +62,39 @@ file picker, the worker and the core exactly as a capture you drop in is -
 not a pre-computed report. An example that takes a different path from the
 real thing is an example that can quietly stop being true.
 
+## Deploying it
+
+`.github/workflows/deploy.yml` builds the site and publishes it to GitHub
+Pages on every push to `main`. It runs the gates first - the labelled corpus,
+the JSON report check and the assistant checks - because a deploy that
+skipped them could put a detector on the internet that reports loss where
+there is none, which is the one thing this project exists not to do.
+
+**It needs one setting that only the repository owner can change**:
+Settings -> Pages -> Build and deployment -> Source -> **GitHub Actions**.
+Until that is set, the workflow runs and the deploy step fails with a
+permissions error. Nothing else needs configuring: no secrets, no tokens, no
+environment variables.
+
+### What hosting this actually means
+
+The site is static. The analysis runs in the visitor's browser, so there is
+no server to run, no database, and no runtime of any kind - `ui/dist` is
+about 975 kB, of which 616 kB is the WebAssembly module, and it can sit on
+GitHub Pages, Netlify, Cloudflare, S3 or a USB stick.
+
+The consequence worth sitting with is that **captures never reach the host**.
+Somebody can open a customer's traffic on a deployment of this and the person
+running it never holds that traffic: there is nothing to secure, nothing to
+breach, no retention policy to write, and a thousand people analysing two
+gigabyte captures cost the host nothing but the one-time download of those
+975 kB. Most tools in this space are a server somebody has to defend.
+
+Built assets are referenced relative to the page rather than from the site
+root, so the same build works at the top of a domain and in a subdirectory
+like `/AtherNet/`. Both were checked by serving `ui/dist` from a plain static
+server with no Vite involved.
+
 ### Why the browser runs the analysis
 
 The desktop app reads files from disk through Tauri, which on Windows needs

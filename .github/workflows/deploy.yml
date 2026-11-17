@@ -1,0 +1,105 @@
+# Build AtherNet and publish it to GitHub Pages.
+#
+# The site is static: the analysis runs in the visitor's browser, compiled to
+# WebAssembly, so there is nothing to deploy but files. No server, no secrets,
+# no environment to configure.
+#
+# The gates run before anything is published. A deploy that skipped them could
+# put a detector on the internet that reports loss where there is none, and
+# the whole point of this project is that it does not do that.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  # So it can be run by hand from the Actions tab without a commit.
+  workflow_dispatch:
+
+# Only what publishing needs, and nothing else.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A second push should not race the first one to the live site, but neither
+# should it cancel a deploy that is already uploading.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust with the WebAssembly target
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add wasm32-unknown-unknown
+          rustc --version
+
+      # Three crates are compiled here; athernet-app is not. It is the Tauri
+      # desktop shell, it needs system libraries this job has no reason to
+      # install, and nothing in the website comes from it.
+      - name: Cache the Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Build the labelled corpus
+        run: node tools/make-fixtures.mjs
+
+      - name: Test the core
+        run: cargo test -p athernet-core -p athernet-wasm --release
+
+      - name: Build the headless analyser
+        run: cargo build --release -p athernet-core --bin athernet-bench
+
+      # The phase 2 and phase 5 gates: every planted fault found, nothing on
+      # the clean captures, the JSON report valid, and nothing a capture
+      # contains able to become structure in an answer or an export.
+      - name: Run the gates
+        run: node tools/check-corpus.mjs
+
+      - name: Compile the core for the browser
+        run: node tools/build-wasm.mjs
+
+      - name: Bundle the example captures
+        run: node tools/make-examples.mjs
+
+      - name: Install the front end
+        run: npm ci
+        working-directory: ui
+
+      - name: Build the site
+        run: npm run build
+        working-directory: ui
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ui/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
