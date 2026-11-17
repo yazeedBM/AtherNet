@@ -9,6 +9,7 @@ import {
 import { Assistant } from './Assistant';
 import { AddressingTable, ConversationList, PacketExplorer } from './Explorer';
 import { ExportPanel } from './ExportPanel';
+import { NetworkMap } from './Map';
 import {
   forgetEverything,
   loadCaptures,
@@ -34,7 +35,7 @@ import {
 type Depth = 'plain' | 'detail' | 'raw';
 
 /** What the work area is showing for a single capture. */
-type View = 'issues' | 'conversations' | 'addressing' | 'packets' | 'export';
+type View = 'issues' | 'map' | 'conversations' | 'addressing' | 'packets' | 'export';
 
 const SEVERITY_ICON: Record<Severity, string> = {
   error: '✕',
@@ -510,7 +511,7 @@ export function App() {
 
           {single && (
             <nav className="views" role="tablist" aria-label="What to show for this capture">
-              {(['issues', 'conversations', 'addressing', 'packets', 'export'] as View[]).map((option) => (
+              {(['issues', 'map', 'conversations', 'addressing', 'packets', 'export'] as View[]).map((option) => (
                 <button
                   type="button"
                   key={option}
@@ -524,16 +525,31 @@ export function App() {
                 >
                   {option === 'issues'
                     ? `Issues (${single.findings.length})`
-                    : option === 'conversations'
-                      ? `Conversations (${single.conversationCount.toLocaleString()})`
-                      : option === 'addressing'
-                        ? `Addressing (${single.bindings.length})`
-                        : option === 'packets'
-                          ? `Packets (${single.packets.toLocaleString()})`
-                          : 'Export'}
+                    : option === 'map'
+                      ? 'Map'
+                      : option === 'conversations'
+                        ? `Conversations (${single.conversationCount.toLocaleString()})`
+                        : option === 'addressing'
+                          ? `Addressing (${single.bindings.length})`
+                          : option === 'packets'
+                            ? `Packets (${single.packets.toLocaleString()})`
+                            : 'Export'}
                 </button>
               ))}
             </nav>
+          )}
+
+          {single && view === 'map' && (
+            <section className="issues">
+              <NetworkMap
+                capture={single}
+                onShowPackets={(firstPacket) => {
+                  setFlowOfPacket(firstPacket);
+                  setJumpTo(firstPacket);
+                  setView('packets');
+                }}
+              />
+            </section>
           )}
 
           {single && view === 'conversations' && (
@@ -695,7 +711,7 @@ function EmptyState({
           <button type="button" className="linklike" onClick={onLoadExamples}>
             Load the example captures
           </button>{' '}
-          - thirteen small files with faults planted in them on purpose, used to test the detectors.
+          - small files with faults planted in them on purpose, used to test the detectors.
         </p>
       </div>
     </main>

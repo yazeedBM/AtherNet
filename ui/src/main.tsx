@@ -6,6 +6,7 @@ import './upload.css';
 import './explorer.css';
 import './builder.css';
 import './assistant.css';
+import './map.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('no #root element');

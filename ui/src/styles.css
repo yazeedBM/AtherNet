@@ -1,34 +1,64 @@
 :root {
-  --bg: #fbfbfa;
+  /* The five colours this app is built from:
+   *   #FCBB6D  #D8737F  #AB6C82  #685D79  #475C7A
+   *
+   * This ramp suits the app better than a single-hue one could, because
+   * severity here is carried by colour and three severities need three
+   * hues a person can tell apart at a glance. The amber, the rose and the
+   * blue-grey are those three, and the blue is left free for anything
+   * interactive - so a link and an error are never the same colour.
+   *
+   * The surfaces underneath are much darker than the darkest of the five.
+   * #475C7A as a page background reads as a blue wash rather than as dark,
+   * and the colours that have to stand out on top of it stop standing out.
+   */
+  --brand-1: #fcbb6d;
+  --brand-2: #d8737f;
+  --brand-3: #ab6c82;
+  --brand-4: #685d79;
+  --brand-5: #475c7a;
+
+  --bg: #f6f7f9;
   --panel: #ffffff;
-  --ink: #16160f;
-  --muted: #6b6b60;
-  --line: #e4e2dc;
-  --accent: #2f6ddb;
-  --error: #b3261e;
-  --error-bg: #fbebeb;
-  --warning: #9a6200;
-  --warning-bg: #f9eeda;
-  --info: #5b5b52;
-  --info-bg: #f0efec;
+  --ink: #1a2029;
+  --muted: #5e6878;
+  --line: #dfe3e9;
+
+  --accent: #475c7a;
+
+  /* Darkened from the ramp so they carry on white as well as they do on
+   * near-black; the hues are unchanged. */
+  --error: #b4535f;
+  --error-bg: #fbedef;
+  --warning: #8a5a1c;
+  --warning-bg: #fbf1df;
+  --info: #5e6878;
+  --info-bg: #eef0f3;
+
   --radius: 8px;
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #15150f;
-    --panel: #1d1d17;
-    --ink: #f2f1ec;
-    --muted: #a3a295;
-    --line: #34332b;
-    --accent: #87aef4;
-    --error: #ef9a93;
-    --error-bg: #3a1c19;
-    --warning: #e7bc6a;
-    --warning-bg: #372b12;
-    --info: #b9b8ad;
-    --info-bg: #26261f;
+    /* Near-black with the blue end's coolness in it, rather than a tint of
+     * any one of the five. */
+    --bg: #0e1319;
+    --panel: #161d26;
+    --ink: #eceff3;
+    --muted: #96a1b2;
+    --line: #28313e;
+
+    /* The palette's blue lightened enough to read on this: #475C7A itself
+     * is too close to the background to carry a link. */
+    --accent: #7d9bc2;
+
+    --error: #d8737f;
+    --error-bg: #33181e;
+    --warning: #fcbb6d;
+    --warning-bg: #35281a;
+    --info: #96a1b2;
+    --info-bg: #1c232d;
   }
 }
 

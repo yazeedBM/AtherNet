@@ -1,0 +1,250 @@
+/* The map. */
+
+.map {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.map-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.map-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.key {
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.key + .key {
+  margin-left: 10px;
+}
+
+.key-error {
+  background: var(--error);
+}
+
+.key-warning {
+  background: var(--warning);
+}
+
+.key-normal {
+  background: var(--accent);
+}
+
+.map-zoom {
+  margin-left: auto;
+}
+
+.map-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.map-body:has(.map-detail) {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.map-svg {
+  width: 100%;
+  height: auto;
+  background: #090d12;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: grab;
+  touch-action: none;
+}
+
+.map-svg:active {
+  cursor: grabbing;
+}
+
+/* ------------------------------------------------------------------ edges */
+
+.edge {
+  fill: none;
+  stroke: var(--accent);
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.edge:hover {
+  opacity: 1;
+  stroke-width: 3;
+}
+
+.edge-warning {
+  stroke: var(--warning);
+  opacity: 0.75;
+}
+
+.edge-error {
+  stroke: var(--error);
+  opacity: 0.95;
+}
+
+.edge.is-dim {
+  opacity: 0.08;
+}
+
+/* ------------------------------------------------------------------ nodes */
+
+.node {
+  cursor: pointer;
+}
+
+.node circle {
+  /* The palette's blue, lightened so a node reads as an object on the
+     near-black rather than as a hole in it. */
+  fill: #5c76a0;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.node text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 8px;
+  fill: #8d99aa;
+  pointer-events: none;
+}
+
+.node:hover circle {
+  stroke-width: 3;
+}
+
+.node-warning circle {
+  fill: var(--warning);
+  stroke: var(--warning);
+}
+
+.node-error circle {
+  fill: var(--error);
+  stroke: var(--error);
+}
+
+.node.is-chosen circle {
+  stroke: #eceff3;
+  stroke-width: 3;
+}
+
+.node.is-chosen text {
+  fill: #eceff3;
+  font-size: 9px;
+}
+
+.node.is-dim {
+  opacity: 0.15;
+}
+
+/* --------------------------------------------------------------- detail */
+
+.map-detail {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 12px 14px;
+  max-height: 70vh;
+  overflow: auto;
+  position: sticky;
+  top: 12px;
+}
+
+.map-detail header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.map-detail h3 {
+  margin: 0;
+  font-size: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.map-detail h4 {
+  margin: 16px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.map-detail p {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+.map-detail .rail-close {
+  opacity: 1;
+}
+
+.map-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.map-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.map-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--accent);
+}
+
+.dot-warning {
+  background: var(--warning);
+}
+
+.dot-error {
+  background: var(--error);
+}
+
+.map-list .linklike {
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+  .map-body:has(.map-detail) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .map-detail {
+    position: static;
+    max-height: none;
+  }
+}
