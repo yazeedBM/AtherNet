@@ -7,6 +7,13 @@ import {
   type FileProblem,
 } from './analyse';
 import { Assistant } from './Assistant';
+import {
+  findingTruth,
+  parseDisplayFilter,
+  toFilter,
+  type ParsedFilter,
+} from './display-filter';
+import { describe as describeFilter } from './filter';
 import { AddressingTable, ConversationList, PacketExplorer } from './Explorer';
 import { ExportPanel } from './ExportPanel';
 import { NetworkMap } from './Map';
@@ -213,8 +220,18 @@ export function App() {
   // file and packet 7 of another are not in any sequence together.
   const single = visibleCaptures.length === 1 ? visibleCaptures[0] : null;
 
+  // The box takes two kinds of input and always has: a display filter, which
+  // is a query against the capture, and plain words, which are a search. It
+  // is parsed once here and the answer drives the issues list, the map and
+  // the packet list, so the three cannot disagree about what is being asked.
+  const query = useMemo(() => parseDisplayFilter(filter.text), [filter.text]);
+  const parsed: ParsedFilter | null = query.kind === 'filter' ? query.parsed : null;
+
   const rows = useMemo(() => {
-    const text = filter.text.trim().toLowerCase();
+    // Only a search when the box did not hold a filter. A half-typed filter
+    // is not searched for as text: that is how `ip.addr ==` ends up matching
+    // nothing and looking like an answer.
+    const text = query.kind === 'text' ? filter.text.trim().toLowerCase() : '';
     return visibleCaptures
       .flatMap((capture) => capture.findings.map((finding) => ({ capture, finding })))
       .filter(({ finding }) => filter.severities.length === 0 || filter.severities.includes(finding.severity))
@@ -223,6 +240,9 @@ export function App() {
           filter.confidences.length === 0 || filter.confidences.includes(finding.confidence),
       )
       .filter(({ finding }) => !filter.kindPrefix || finding.kind.startsWith(filter.kindPrefix))
+      // A finding the filter rules out is dropped; one it cannot decide is
+      // kept, for the same reason the map keeps it.
+      .filter(({ finding }) => !parsed || findingTruth(parsed, finding) !== false)
       .filter(({ finding, capture }) => {
         if (!text) return true;
         const haystack = [finding.title, finding.what, finding.kind, capture.file, ...finding.endpoints]
@@ -231,7 +251,7 @@ export function App() {
         return haystack.includes(text);
       })
       .sort((a, b) => SEVERITY_ORDER[a.finding.severity] - SEVERITY_ORDER[b.finding.severity]);
-  }, [visibleCaptures, filter.severities, filter.confidences, filter.text, filter.kindPrefix]);
+  }, [visibleCaptures, filter.severities, filter.confidences, filter.text, filter.kindPrefix, query, parsed]);
 
   const totals = useMemo(() => {
     const packets = visibleCaptures.reduce((sum, c) => sum + c.packets, 0);
@@ -449,12 +469,33 @@ export function App() {
             <input
               className="search"
               type="search"
-              aria-label="Filter findings"
-              placeholder="address, port, protocol, or words in a finding"
+              aria-label="Filter findings and packets"
+              aria-invalid={query.kind === 'error'}
+              aria-describedby="filter-reading"
+              placeholder="ip.addr == 10.0.0.1, tcp.port == 443, dns - or words in a finding"
               value={filter.text}
               onChange={(e) => setFilter((f) => ({ ...f, text: e.target.value }))}
             />
           </div>
+          {/* What the box made of what was typed. A filter language without
+              this line is a guessing game: an empty list means "nothing
+              matched" and "I did not understand you" at the same time, and
+              those are opposite things to do next. */}
+          {query.kind !== 'empty' && (
+            <p
+              id="filter-reading"
+              className={`filter-reading ${query.kind === 'error' ? 'is-bad' : ''}`}
+              role={query.kind === 'error' ? 'alert' : undefined}
+            >
+              {query.kind === 'error' ? (
+                query.message
+              ) : query.kind === 'text' ? (
+                <>Searching the findings for these words. For a packet filter, try <code>ip.addr == 10.0.0.1</code>.</>
+              ) : (
+                <>Filtering packets, findings and the map where {describeFilter(toFilter(query.parsed))}</>
+              )}
+            </p>
+          )}
           <div className="shortcuts">
             {(['error', 'warning', 'info'] as Severity[]).map((severity) => (
               <button
@@ -603,6 +644,7 @@ export function App() {
             <section className="issues">
               <NetworkMap
                 capture={single}
+                parsed={parsed}
                 onShowPackets={(firstPacket) => {
                   setFlowOfPacket(firstPacket);
                   setJumpTo(firstPacket);
@@ -642,6 +684,7 @@ export function App() {
               <PacketExplorer
                 capture={single}
                 file={files.get(single.id)}
+                parsed={parsed}
                 flowOfPacket={flowOfPacket}
                 jumpTo={jumpTo}
                 onClearFlow={() => {

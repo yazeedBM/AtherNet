@@ -18,7 +18,25 @@
 // would be useless for comparing two readings of the same network.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { conversationTruth, hasUndecidable, type ParsedFilter } from './display-filter';
+import type { FieldId } from './filter';
 import { conversationLabel, formatBytes, type Capture, type Conversation } from './report';
+
+/**
+ * What a conversation can be asked about itself. Everything else in a filter
+ * is a property of one packet - a length, a flag, a line of summary text - and
+ * a conversation is many packets, so the map cannot answer and says so rather
+ * than guessing in either direction.
+ */
+const MAP_CAN_DECIDE = new Set<FieldId>([
+  'any_addr',
+  'src',
+  'dst',
+  'any_port',
+  'src_port',
+  'dst_port',
+  'protocol',
+]);
 
 /** Past this many, the picture stops being readable before it stops being drawable. */
 const MAX_NODES = 120;
@@ -75,13 +93,26 @@ function seeded(seed: number) {
   };
 }
 
-function buildGraph(capture: Capture): { nodes: Node[]; edges: Edge[]; hidden: number } {
+function buildGraph(
+  capture: Capture,
+  /** The capture-wide filter, or null when nothing is filtering. */
+  parsed: ParsedFilter | null,
+): { nodes: Node[]; edges: Edge[]; hidden: number; dropped: number } {
   const macOf = new Map(capture.bindings.map((b) => [b.address, b]));
+
+  // A conversation the filter rules out is not drawn. One the filter cannot
+  // decide is kept: the map holding an address it cannot clear is honest,
+  // whereas an empty map would read as "nothing here", which is a different
+  // and much more expensive claim.
+  const conversations = parsed
+    ? capture.conversations.filter((c) => conversationTruth(parsed, c) !== false)
+    : capture.conversations;
+  const dropped = capture.conversations.length - conversations.length;
 
   // Conversations are per port pair; the map is per host pair, because
   // fifty connections between two machines are one relationship.
   const edges = new Map<string, Edge>();
-  for (const c of capture.conversations) {
+  for (const c of conversations) {
     const [a, b] = [c.a, c.b].sort();
     const key = `${a}|${b}`;
     const existing = edges.get(key);
@@ -153,7 +184,7 @@ function buildGraph(capture: Capture): { nodes: Node[]; edges: Edge[]; hidden: n
   const keptIds = new Set(kept.map((n) => n.id));
   const keptEdges = [...edges.values()].filter((e) => keptIds.has(e.a) && keptIds.has(e.b));
 
-  return { nodes: kept, edges: keptEdges, hidden: nodes.size - kept.length };
+  return { nodes: kept, edges: keptEdges, hidden: nodes.size - kept.length, dropped };
 }
 
 /**
@@ -227,19 +258,26 @@ function layout(nodes: Node[], edges: Edge[]) {
 
 export function NetworkMap({
   capture,
+  parsed,
   onShowPackets,
 }: {
   capture: Capture;
+  /** The capture-wide filter from the bar, or null when nothing is filtering. */
+  parsed: ParsedFilter | null;
   onShowPackets: (firstPacket: number) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const dragging = useRef<{ x: number; y: number } | null>(null);
 
   const graph = useMemo(() => {
-    const built = buildGraph(capture);
+    const built = buildGraph(capture, parsed);
     layout(built.nodes, built.edges);
     return built;
-  }, [capture]);
+  }, [capture, parsed]);
+
+  // A filter the map could only partly apply has to say so, otherwise the
+  // picture reads as the whole answer to a question it only half heard.
+  const partial = parsed !== null && hasUndecidable(parsed, MAP_CAN_DECIDE);
 
   // The map used to open at 1:1 on a 1000x680 canvas whatever it had to
   // draw, so four addresses - which is most captures - sat in a knot in
@@ -271,14 +309,19 @@ export function NetworkMap({
   useEffect(() => setView(home), [home]);
 
   // A capture the map cannot say anything about says so, rather than
-  // drawing an empty box.
-  useEffect(() => setSelected(null), [capture.id]);
+  // drawing an empty box. A selection that the filter has just removed goes
+  // with it, so the detail panel never describes an address no longer drawn.
+  useEffect(() => setSelected(null), [capture.id, parsed]);
 
   if (graph.nodes.length === 0) {
+    // Two different nothings, and telling them apart is the whole job: a
+    // capture with no conversations is a fact about the file, while a filter
+    // that matched none is a fact about the question just asked.
     return (
       <p className="muted empty-note">
-        Nothing in this capture is a conversation between two addresses, so there is no map to draw. That is
-        normal for a file holding only ARP, or only one direction of traffic below the IP layer.
+        {parsed
+          ? `No conversation in this capture matches ${parsed.source}. The filter is still in force - clear it to see the whole map.`
+          : 'Nothing in this capture is a conversation between two addresses, so there is no map to draw. That is normal for a file holding only ARP, or only one direction of traffic below the IP layer.'}
       </p>
     );
   }
@@ -310,6 +353,9 @@ export function NetworkMap({
           {graph.nodes.length} {graph.nodes.length === 1 ? 'address' : 'addresses'},{' '}
           {graph.edges.length} {graph.edges.length === 1 ? 'pair' : 'pairs'} talking
           {graph.hidden > 0 && ` - ${graph.hidden} quieter ${graph.hidden === 1 ? 'address is' : 'addresses are'} left out`}
+          {graph.dropped > 0 &&
+            ` - ${graph.dropped} ${graph.dropped === 1 ? 'conversation does' : 'conversations do'} not match the filter`}
+          {partial && ' - part of the filter is about single packets, which this view cannot judge'}
         </span>
         <span className="map-legend">
           <span className="key key-error" /> something failed

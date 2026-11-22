@@ -488,6 +488,37 @@ b {
   user-select: none;
 }
 
+/* What the box understood, on its own line under it.
+ *
+ * Full width rather than squeezed alongside the chips: it is a sentence, and
+ * a sentence that wraps after three words to make room for a row of buttons
+ * is a sentence nobody finishes. */
+.filter-reading {
+  /* 100% of the bar forces its own line, which is all the ordering it needs. */
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.filter-reading code {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+
+/* A filter that did not parse is the one case where this line has to be read
+ * rather than glanced at, so it takes the error colour and an icon - colour
+ * alone is not a message. */
+.filter-reading.is-bad {
+  color: var(--error);
+}
+
+.filter-reading.is-bad::before {
+  content: '✕ ';
+  font-family: var(--mono);
+}
+
 .shortcuts {
   display: flex;
   gap: var(--s-2);

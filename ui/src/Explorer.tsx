@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Explorer } from './analyse';
 import { FilterBuilder } from './FilterBuilder';
+import { andDnf, dnfOfFilter, toFilter, type ParsedFilter } from './display-filter';
 import { conditionCount, describe, EMPTY_BUILDER, encode, isEmpty, type Filter } from './filter';
 import {
   conversationLabel,
@@ -325,12 +326,15 @@ export function AddressingTable({ capture }: { capture: Capture }) {
 export function PacketExplorer({
   capture,
   file,
+  parsed,
   flowOfPacket,
   jumpTo,
   onClearFlow,
 }: {
   capture: Capture;
   file: File | undefined;
+  /** The capture-wide filter from the bar, or null when nothing is filtering. */
+  parsed: ParsedFilter | null;
   /** Show only this packet's conversation, or null for all of them. */
   flowOfPacket: number | null;
   /** Select this packet as soon as the list is up. */
@@ -350,7 +354,21 @@ export function PacketExplorer({
   // The core reads the filter as text, and rebuilding that string is cheap,
   // but it is also the effect's dependency - so it is memoised to stop every
   // unrelated render from re-running the query.
-  const encoded = useMemo(() => encode(filter), [filter]);
+  //
+  // Two filters can be in force at once: the one typed in the bar, which
+  // applies to the whole capture, and the one built here, which refines it.
+  // Both are true, so both are applied - put in one form and combined, rather
+  // than one quietly winning.
+  const encoded = useMemo(
+    () =>
+      encode(
+        toFilter({
+          dnf: andDnf(parsed ? parsed.dnf : [], dnfOfFilter(filter)),
+          source: '',
+        }),
+      ),
+    [filter, parsed],
+  );
 
   // One capture open at a time. Closing it releases the file and everything
   // built from it, which is the whole reason the analysis pass does not keep
@@ -442,6 +460,18 @@ export function PacketExplorer({
           <button type="button" className="chip is-on" onClick={onClearFlow}>
             One conversation only · show all
           </button>
+        )}
+        {/* The bar at the top of the window is a long way from this list, and
+            a count that has already been narrowed by something off-screen is
+            how a packet tool loses somebody's trust.
+
+            Not a chip: a chip is something you press, and this is a statement
+            of what is already true. It is set in the machine's face because a
+            filter expression is the machine's language, not the app's. */}
+        {parsed && (
+          <span className="explorer-wide-filter" title="Set in the filter bar, applies to the whole capture">
+            and <code>{parsed.source}</code>
+          </span>
         )}
         <button
           type="button"

@@ -184,6 +184,23 @@
   white-space: nowrap;
 }
 
+/* The capture-wide filter, restated beside the packet count it narrowed.
+ * Not a control: the word "and" is the app's, the expression is the
+ * machine's, and the two faces say which is which without a label. */
+.explorer-wide-filter {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explorer-wide-filter code {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+
 /* The filter row's input asked for 240px and then sat next to a button and
  * a count, which on a phone is more than the window has - so the row
  * pushed the whole document sideways. It gives up its minimum here and

@@ -84,6 +84,11 @@ jobs:
         run: npm ci
         working-directory: ui
 
+      # Runs here rather than with the other gates because it compiles a
+      # front-end module, which needs ui/node_modules to exist.
+      - name: Check the display filter
+        run: node tools/check-display-filter.mjs
+
       - name: Build the site
         run: npm run build
         working-directory: ui
