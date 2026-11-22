@@ -6,16 +6,20 @@
 }
 
 /* The whole window is the drop target, so a file dropped anywhere lands.
-   The outline appears only while something is being dragged over it. */
+   The outline appears only while something is being dragged over it -
+   this is the one dashed border in the app, and it is dashed because it
+   is the one thing you can actually drop onto. */
 .shell.is-dragging::after {
   content: 'Drop capture files to open them';
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
   position: fixed;
   inset: 12px;
   z-index: 40;
   display: grid;
   place-items: center;
-  border: 2px dashed var(--accent);
-  border-radius: 12px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg) 88%, var(--accent));
   color: var(--accent);
   font-weight: 600;
@@ -36,8 +40,8 @@
 .rail-close {
   background: none;
   border: 0;
-  border-radius: 6px;
-  color: var(--muted);
+  border-radius: var(--radius);
+  color: var(--dim);
   font-size: var(--text-base);
   line-height: 1;
   padding: 6px 8px;
@@ -57,41 +61,50 @@
 }
 
 .rail-actions {
-  margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px 0 10px;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-5);
+  border-top: 1px solid var(--line);
 }
 
+/* Buttons are keys: square, mono, flush. A key you press to do the thing
+   the screen is for is filled; everything else is outlined. */
 .open-button {
-  border: 1px solid var(--line);
-  background: var(--panel);
+  border: 1px solid var(--line-2);
+  background: var(--bg);
   color: var(--ink);
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: var(--text-md);
+  border-radius: var(--radius);
+  padding: var(--s-3) var(--s-4);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
   font-weight: 500;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
 }
 
 .open-button:hover {
   border-color: var(--accent);
-  color: var(--accent);
+  background: var(--raised);
 }
 
 .open-button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: #0a0e13;
+  font-weight: 600;
 }
 
 .open-button.primary:hover {
-  filter: brightness(1.08);
-  color: #fff;
+  filter: brightness(1.1);
+  color: #0a0e13;
 }
 
 .open-button.ghost {
   background: none;
+  border-color: var(--line);
   color: var(--muted);
 }
 
@@ -107,7 +120,9 @@
 }
 
 .progress-text {
-  font-size: var(--text-md);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.03em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -115,9 +130,9 @@
 
 .progress-track {
   flex: 1;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--info-bg);
+  height: 4px;
+  border-radius: 0;
+  background: var(--line);
   overflow: hidden;
 }
 
@@ -129,7 +144,7 @@
 
 .problems {
   margin: 0;
-  padding: 10px 20px;
+  padding: var(--s-3) var(--s-6);
   list-style: none;
   display: flex;
   flex-direction: column;
@@ -147,10 +162,32 @@
  * inside it centred - which is the shape a first screen takes when it is
  * assembled rather than laid out, and it put the one thing you have to do
  * in the middle of nowhere. It starts where the page starts now, and the
- * text is ranged left so the eye has one edge to come back to. */
+ * text is ranged left so the eye has one edge to come back to.
+ *
+ * It stands on the same graticule as the traffic trace and the map,
+ * because that is what this screen is: the instrument's face with nothing
+ * on it yet. The grid says what kind of thing you are looking at before
+ * you have given it anything to read. */
 .work.empty {
   display: block;
-  padding: var(--s-8) var(--s-6);
+  padding: var(--s-8) var(--s-7);
+  background:
+    repeating-linear-gradient(to right, var(--grid) 0 1px, transparent 1px 40px),
+    repeating-linear-gradient(to bottom, var(--grid) 0 1px, transparent 1px 40px),
+    var(--bg);
+}
+
+/* A standing line at the top of the empty face, the way a scope shows a
+   flat trace when nothing is connected: the instrument is on and it is
+   reading nothing. */
+.dropzone::before {
+  content: '';
+  display: block;
+  height: 1px;
+  width: 100%;
+  max-width: 34ch;
+  background: linear-gradient(to right, var(--accent), transparent);
+  margin-bottom: var(--s-6);
 }
 
 /* The dashes are gone too. A dashed outline means "drop here", and this
@@ -158,7 +195,7 @@
  * draws its own outline while something is over it. A permanent dashed
  * border around a panel you cannot drop onto is decoration that lies. */
 .dropzone {
-  max-width: 62ch;
+  max-width: 64ch;
   border: 0;
   border-radius: var(--radius);
   padding: 0;
@@ -166,11 +203,11 @@
 }
 
 .dropzone h1 {
-  margin: 0 0 var(--s-4);
+  margin: 0 0 var(--s-5);
   font-size: var(--text-2xl);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
 }
 
 .dropzone .lead {
@@ -181,10 +218,12 @@
 }
 
 .dropzone code {
-  background: var(--info-bg);
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: var(--text-md);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1px var(--s-2);
+  font-family: var(--mono);
+  font-size: var(--text-sm);
 }
 
 .dropzone-actions {
@@ -230,10 +269,12 @@
 .retain {
   display: flex;
   align-items: flex-start;
-  gap: 7px;
-  padding: 10px 8px 0;
-  font-size: var(--text-sm);
-  color: var(--muted);
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-5) 0;
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--dim);
   cursor: pointer;
 }
 

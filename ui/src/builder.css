@@ -10,15 +10,17 @@
   gap: 10px;
 }
 
+/* A clause of a filter is machine input, so it is typed and chosen in the
+   machine's face like everything else the capture touches. */
 .builder select,
 .builder input {
   background: var(--bg);
   color: var(--ink);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font: inherit;
-  font-size: var(--text-md);
+  border-radius: var(--radius);
+  padding: var(--s-2) var(--s-3);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
 }
 
 .builder select:focus-visible,
@@ -114,14 +116,17 @@
 }
 
 /* The filter written back as a sentence. This is the part people actually
-   read to check they built what they meant. */
+   read to check they built what they meant - and it is the app talking,
+   not the machine, so it is the one thing in the builder set in prose.
+   A rule rather than a tray: it is a readout, not an aside. */
 .builder-sentence {
   margin: 0;
   font-size: var(--text-md);
-  line-height: 1.55;
-  background: var(--info-bg);
-  border-radius: 8px;
-  padding: 10px 12px;
+  line-height: 1.6;
+  background: none;
+  border-left: 2px solid var(--accent);
+  border-radius: 0;
+  padding: var(--s-1) 0 var(--s-1) var(--s-4);
 }
 
 .builder-save {

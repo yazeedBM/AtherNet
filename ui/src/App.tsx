@@ -45,6 +45,15 @@ const SEVERITY_ICON: Record<Severity, string> = {
 
 const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
 
+/* The worst thing in a capture, for the tick in the rail's gutter. Only
+   error and warning get one: a file whose findings are all informational
+   is not a file you need drawn to your attention from across the room. */
+function worstSeverity(capture: Capture): 'error' | 'warning' | null {
+  if (capture.findings.some((f) => f.severity === 'error')) return 'error';
+  if (capture.findings.some((f) => f.severity === 'warning')) return 'warning';
+  return null;
+}
+
 interface Filter {
   captureId: string;
   severities: Severity[];
@@ -301,42 +310,49 @@ export function App() {
 
         <button
           type="button"
-          className={`rail-item ${filter.captureId === 'all' ? 'is-active' : ''}`}
+          className={`rail-item rail-all ${filter.captureId === 'all' ? 'is-active' : ''}`}
           onClick={() => setFilter((f) => ({ ...f, captureId: 'all' }))}
         >
-          <span>All captures</span>
+          <span className="rail-file">All captures</span>
           <span className="rail-count">{captures.length}</span>
         </button>
 
-        {captures.map((capture) => (
-          <div className="rail-row" key={capture.id}>
-            <button
-              type="button"
-              className={`rail-item ${filter.captureId === capture.id ? 'is-active' : ''}`}
-              onClick={() => {
-                setFilter((f) => ({ ...f, captureId: capture.id }));
-                setFlowOfPacket(null);
-                setJumpTo(null);
-              }}
-              title={capture.description}
-              aria-label={`${capture.file}, ${capture.findings.length || 'no'} ${
-                capture.findings.length === 1 ? 'finding' : 'findings'
-              }`}
-            >
-              <span className="rail-file">{capture.file}</span>
-              {capture.findings.length > 0 && <span className="rail-count">{capture.findings.length}</span>}
-            </button>
-            <button
-              type="button"
-              className="rail-close"
-              onClick={() => removeCapture(capture.id)}
-              aria-label={`Close ${capture.file} and remove it from this session`}
-              title="Close this capture"
-            >
-              ×
-            </button>
-          </div>
-        ))}
+        {/* The index. Each row carries a tick in its left gutter coloured
+            by the worst thing in that file, so the shape of a whole folder
+            is readable down the edge before anything is opened. */}
+        <div className="rail-index">
+          {captures.map((capture) => (
+            <div className="rail-row" key={capture.id}>
+              <button
+                type="button"
+                className={`rail-item ${filter.captureId === capture.id ? 'is-active' : ''} ${
+                  worstSeverity(capture) ? `has-${worstSeverity(capture)}` : ''
+                }`}
+                onClick={() => {
+                  setFilter((f) => ({ ...f, captureId: capture.id }));
+                  setFlowOfPacket(null);
+                  setJumpTo(null);
+                }}
+                title={capture.description}
+                aria-label={`${capture.file}, ${capture.findings.length || 'no'} ${
+                  capture.findings.length === 1 ? 'finding' : 'findings'
+                }`}
+              >
+                <span className="rail-file">{capture.file}</span>
+                {capture.findings.length > 0 && <span className="rail-count">{capture.findings.length}</span>}
+              </button>
+              <button
+                type="button"
+                className="rail-close"
+                onClick={() => removeCapture(capture.id)}
+                aria-label={`Close ${capture.file} and remove it from this session`}
+                title="Close this capture"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
 
         <div className="rail-actions">
           <button type="button" className="open-button" onClick={() => filePicker.current?.click()}>
@@ -423,14 +439,22 @@ export function App() {
         ) : (
         <>
         <header className="filterbar">
-          <input
-            className="search"
-            type="search"
-            aria-label="Filter findings"
-            placeholder="Filter by address, port, protocol or words in a finding"
-            value={filter.text}
-            onChange={(e) => setFilter((f) => ({ ...f, text: e.target.value }))}
-          />
+          {/* A prompt caret rather than a magnifying glass: what goes in
+              here is a query against the capture, and the caret says so in
+              the same face the answer comes back in. */}
+          <div className="search-field">
+            <span className="search-caret" aria-hidden="true">
+              ›
+            </span>
+            <input
+              className="search"
+              type="search"
+              aria-label="Filter findings"
+              placeholder="address, port, protocol, or words in a finding"
+              value={filter.text}
+              onChange={(e) => setFilter((f) => ({ ...f, text: e.target.value }))}
+            />
+          </div>
           <div className="shortcuts">
             {(['error', 'warning', 'info'] as Severity[]).map((severity) => (
               <button
@@ -500,27 +524,29 @@ export function App() {
         </header>
 
         <main className="work">
-          {/* The errors tile leads the row, because it is the one figure
-              this app exists to produce; the rest are the context you read
-              it against. The capture count is dropped when there is only
-              one capture in view - a tile reading "1 capture" above a
-              named capture is a number nobody needed. */}
-          <section className="cards">
+          {/* The standing conditions of whatever is in view, on one strip.
+              Errors lead it because that is the figure the app exists to
+              produce; the rest are the context you read it against. */}
+          <section className="statusline" aria-label="Capture summary">
+            <Stat
+              label={totals.errors === 1 ? 'error' : 'errors'}
+              value={totals.errors.toString()}
+              tone={totals.errors > 0 ? 'error' : 'clear'}
+              lead
+            />
             {!single && (
               <Stat
-                label={visibleCaptures.length === 1 ? 'Capture' : 'Captures'}
+                label={visibleCaptures.length === 1 ? 'capture' : 'captures'}
                 value={visibleCaptures.length.toString()}
               />
             )}
-            <Stat label="Errors" value={totals.errors.toString()} tone={totals.errors > 0 ? 'error' : undefined} lead />
-            <Stat label={totals.packets === 1 ? 'Packet' : 'Packets'} value={totals.packets.toLocaleString()} />
-            <Stat label="Traffic" value={formatBytes(totals.bytes)} />
-            <Stat label="Span" value={formatDuration(totals.seconds)} />
+            <Stat label={totals.packets === 1 ? 'packet' : 'packets'} value={totals.packets.toLocaleString()} />
+            <Stat label="traffic" value={formatBytes(totals.bytes)} />
+            <Stat label="span" value={formatDuration(totals.seconds)} />
             <Stat
-              label="Dropped by the capture tool"
+              label="dropped by the capture tool"
               value={totals.drops.toLocaleString()}
-              tone={totals.drops > 0 ? 'info' : undefined}
-              lead={totals.drops > 0}
+              tone={totals.drops > 0 ? 'warning' : undefined}
             />
           </section>
 
@@ -542,17 +568,32 @@ export function App() {
                     if (option !== 'packets') setJumpTo(null);
                   }}
                 >
-                  {option === 'issues'
-                    ? `Issues (${single.findings.length})`
-                    : option === 'map'
-                      ? 'Map'
-                      : option === 'conversations'
-                        ? `Conversations (${single.conversationCount.toLocaleString()})`
-                        : option === 'addressing'
-                          ? `Addressing (${single.bindings.length})`
-                          : option === 'packets'
-                            ? `Packets (${single.packets.toLocaleString()})`
-                            : 'Export'}
+                  {/* The name is the app's word for the view; the count
+                      beside it came off the capture. Different things, so
+                      the count is dropped back rather than bracketed into
+                      the label. */}
+                  {option === 'issues' ? (
+                    <>
+                      Issues <span className="view-tab-count">{single.findings.length}</span>
+                    </>
+                  ) : option === 'map' ? (
+                    'Map'
+                  ) : option === 'conversations' ? (
+                    <>
+                      Conversations{' '}
+                      <span className="view-tab-count">{single.conversationCount.toLocaleString()}</span>
+                    </>
+                  ) : option === 'addressing' ? (
+                    <>
+                      Addressing <span className="view-tab-count">{single.bindings.length}</span>
+                    </>
+                  ) : option === 'packets' ? (
+                    <>
+                      Packets <span className="view-tab-count">{single.packets.toLocaleString()}</span>
+                    </>
+                  ) : (
+                    'Export'
+                  )}
                 </button>
               ))}
             </nav>
@@ -629,7 +670,7 @@ export function App() {
                       announcing these rows as an unlabelled "button". */}
                   <button
                     type="button"
-                    className="issue"
+                    className={`issue issue-${finding.severity}`}
                     onClick={() => setOpenFinding(finding)}
                     aria-label={`${SEVERITY_LABEL[finding.severity]}, ${
                       CONFIDENCE_LABEL[finding.confidence]
@@ -747,13 +788,13 @@ function Stat({
 }: {
   label: string;
   value: string;
-  tone?: Severity;
+  tone?: 'error' | 'warning' | 'clear';
   lead?: boolean;
 }) {
   return (
-    <div className={`card ${tone ? `card-${tone}` : ''} ${lead ? 'card-lead' : ''}`}>
-      <div className="card-value">{value}</div>
-      <div className="card-label">{label}</div>
+    <div className={`stat ${tone ? `stat-${tone}` : ''} ${lead ? 'stat-lead' : ''}`}>
+      <div className="stat-value">{value}</div>
+      <div className="stat-label">{label}</div>
     </div>
   );
 }
@@ -796,7 +837,9 @@ function CaptureDetail({ capture, depth }: { capture: Capture; depth: Depth }) {
         {capture.timeline.map((value, i) => (
           <span
             key={i}
-            className={`bar ${value === 0 ? 'is-empty' : ''}`}
+            className={`bar ${value === 0 ? 'is-empty' : ''} ${
+              value === peak && peak > 1 ? 'is-peak' : ''
+            }`}
             style={{ height: value === 0 ? 0 : `max(2px, ${(value / peak) * 100}%)` }}
             title={`${value} packets in this ${formatDuration(capture.timelineBucketMs / 1000)}`}
           />
