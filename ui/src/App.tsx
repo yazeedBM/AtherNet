@@ -371,13 +371,18 @@ export function App() {
           </span>
         </label>
 
-        <p className="rail-note">
-          Drop .pcap or .pcapng files here, or a folder of them. They are read on this machine and never
-          uploaded.{' '}
-          {retain
-            ? 'Findings are being kept in this browser until you close them or turn this off. The capture files themselves are never kept, so a capture reopened tomorrow can show its findings but not its packets.'
-            : 'Closing one removes it, and closing the tab removes them all.'}
-        </p>
+        {/* Only once nothing is open does the empty screen say all of this
+            already, at length and better. Two copies of the same promise on
+            one screen makes the reader check whether they differ. */}
+        {captures.length > 0 && (
+          <p className="rail-note">
+            Drop .pcap or .pcapng files here, or a folder of them. They are read on this machine and never
+            uploaded.{' '}
+            {retain
+              ? 'Findings are being kept in this browser until you close them or turn this off. The capture files themselves are never kept, so a capture reopened tomorrow can show its findings but not its packets.'
+              : 'Closing one removes it, and closing the tab removes them all.'}
+          </p>
+        )}
       </aside>
 
       <div className="main">
@@ -421,6 +426,7 @@ export function App() {
           <input
             className="search"
             type="search"
+            aria-label="Filter findings"
             placeholder="Filter by address, port, protocol or words in a finding"
             value={filter.text}
             onChange={(e) => setFilter((f) => ({ ...f, text: e.target.value }))}
@@ -470,8 +476,10 @@ export function App() {
             >
               DNS problems
             </button>
-            <button type="button" className="chip" onClick={() => setFilter(EMPTY_FILTER)}>
-              Clear
+            {/* Not a chip: a chip is something you switch on, and this is
+                the thing that switches them all off. */}
+            <button type="button" className="chip-clear" onClick={() => setFilter(EMPTY_FILTER)}>
+              Clear filters
             </button>
           </div>
           <div className="depth" role="group" aria-label="Level of detail">
@@ -492,16 +500,27 @@ export function App() {
         </header>
 
         <main className="work">
+          {/* The errors tile leads the row, because it is the one figure
+              this app exists to produce; the rest are the context you read
+              it against. The capture count is dropped when there is only
+              one capture in view - a tile reading "1 capture" above a
+              named capture is a number nobody needed. */}
           <section className="cards">
-            <Stat label="Captures" value={visibleCaptures.length.toString()} />
-            <Stat label="Packets" value={totals.packets.toLocaleString()} />
+            {!single && (
+              <Stat
+                label={visibleCaptures.length === 1 ? 'Capture' : 'Captures'}
+                value={visibleCaptures.length.toString()}
+              />
+            )}
+            <Stat label="Errors" value={totals.errors.toString()} tone={totals.errors > 0 ? 'error' : undefined} lead />
+            <Stat label={totals.packets === 1 ? 'Packet' : 'Packets'} value={totals.packets.toLocaleString()} />
             <Stat label="Traffic" value={formatBytes(totals.bytes)} />
             <Stat label="Span" value={formatDuration(totals.seconds)} />
-            <Stat label="Errors" value={totals.errors.toString()} tone={totals.errors > 0 ? 'error' : undefined} />
             <Stat
               label="Dropped by the capture tool"
               value={totals.drops.toLocaleString()}
               tone={totals.drops > 0 ? 'info' : undefined}
+              lead={totals.drops > 0}
             />
           </section>
 
@@ -619,12 +638,14 @@ export function App() {
                     <SeverityBadge severity={finding.severity} />
                     <span className="issue-body">
                       <span className="issue-title">{finding.title}</span>
-                      <span className="issue-meta">
+                      {/* One meta line, not a badge plus a line. Confidence
+                          is a word about this finding, so it sits in the
+                          sentence with the rest of them. */}
+                      <span className="issue-meta muted">
                         <ConfidenceBadge confidence={finding.confidence} />
-                        <span className="muted">
-                          {capture.file} · {finding.at}
-                          {depth !== 'plain' && ` · ${finding.kind}`}
-                        </span>
+                        {' · '}
+                        {capture.file} · {finding.at}
+                        {depth !== 'plain' && ` · ${finding.kind}`}
                       </span>
                     </span>
                   </button>
@@ -718,9 +739,19 @@ function EmptyState({
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: Severity }) {
+function Stat({
+  label,
+  value,
+  tone,
+  lead,
+}: {
+  label: string;
+  value: string;
+  tone?: Severity;
+  lead?: boolean;
+}) {
   return (
-    <div className={`card ${tone ? `card-${tone}` : ''}`}>
+    <div className={`card ${tone ? `card-${tone}` : ''} ${lead ? 'card-lead' : ''}`}>
       <div className="card-value">{value}</div>
       <div className="card-label">{label}</div>
     </div>
@@ -765,8 +796,8 @@ function CaptureDetail({ capture, depth }: { capture: Capture; depth: Depth }) {
         {capture.timeline.map((value, i) => (
           <span
             key={i}
-            className="bar"
-            style={{ height: `${(value / peak) * 100}%` }}
+            className={`bar ${value === 0 ? 'is-empty' : ''}`}
+            style={{ height: value === 0 ? 0 : `max(2px, ${(value / peak) * 100}%)` }}
             title={`${value} packets in this ${formatDuration(capture.timelineBucketMs / 1000)}`}
           />
         ))}
@@ -824,6 +855,17 @@ function FindingDrawer({
   onClose: () => void;
   onShowPackets: () => void;
 }) {
+  // Escape closed nothing: the only way out of the drawer was the mouse,
+  // on a screen whose whole point is reading. A dialog you cannot dismiss
+  // from the keyboard is not finished.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div className="drawer-backdrop" onClick={onClose} role="presentation">
       <aside className="drawer" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={finding.title}>
@@ -837,21 +879,27 @@ function FindingDrawer({
 
         <h2>{finding.title}</h2>
 
-        <h3>What happened</h3>
-        <p>{finding.what}</p>
+        {/* No heading over this one. It is the answer to the question the
+            reader asked by opening the drawer, and a label reading "what
+            happened" above it tells them nothing they had not worked out
+            from clicking. */}
+        <p className="drawer-lead">{finding.what}</p>
 
-        {finding.endpoints.length > 0 && (
-          <>
-            <h3>Who was involved</h3>
-            <p className="mono">{finding.endpoints.join('  ↔  ')}</p>
-          </>
-        )}
-
-        <h3>When</h3>
-        <p>
-          {formatTime(finding.atUnixMs)}
-          <span className="muted"> · {finding.at}</span>
-        </p>
+        {/* Who and when were two headed sections over two one-line facts.
+            They are a pair of facts, so they are drawn as one. */}
+        <dl className="drawer-facts">
+          {finding.endpoints.length > 0 && (
+            <>
+              <dt>Between</dt>
+              <dd className="mono">{finding.endpoints.join('  ↔  ')}</dd>
+            </>
+          )}
+          <dt>When</dt>
+          <dd>
+            {formatTime(finding.atUnixMs)}
+            <span className="muted"> · {finding.at}</span>
+          </dd>
+        </dl>
 
         <h3>The packets that show it</h3>
         <ul className="evidence">

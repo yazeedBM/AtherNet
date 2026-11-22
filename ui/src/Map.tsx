@@ -233,7 +233,6 @@ export function NetworkMap({
   onShowPackets: (firstPacket: number) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const dragging = useRef<{ x: number; y: number } | null>(null);
 
   const graph = useMemo(() => {
@@ -241,6 +240,35 @@ export function NetworkMap({
     layout(built.nodes, built.edges);
     return built;
   }, [capture]);
+
+  // The map used to open at 1:1 on a 1000x680 canvas whatever it had to
+  // draw, so four addresses - which is most captures - sat in a knot in
+  // the middle of an empty rectangle, and "Fit" put them back exactly
+  // where they already were. Fit now means what it says: the view is the
+  // box the addresses actually occupy, with room to breathe.
+  const home = useMemo(() => {
+    if (graph.nodes.length === 0) return { x: 0, y: 0, scale: 1 };
+    const xs = graph.nodes.map((n) => n.x);
+    const ys = graph.nodes.map((n) => n.y);
+    // Enough margin for the biggest node plus the label hanging under it.
+    const pad = 70;
+    const left = Math.min(...xs) - pad;
+    const top = Math.min(...ys) - pad;
+    const width = Math.max(Math.max(...xs) + pad - left, 220);
+    const height = Math.max(Math.max(...ys) + pad - top, 160);
+    // One scale for both axes, so nothing is stretched.
+    const scale = Math.min(WIDTH / width, HEIGHT / height, 3);
+    return {
+      x: left - (WIDTH / scale - width) / 2,
+      y: top - (HEIGHT / scale - height) / 2,
+      scale,
+    };
+  }, [graph]);
+
+  const [view, setView] = useState(home);
+
+  // A different capture is a different graph, so it gets its own fit.
+  useEffect(() => setView(home), [home]);
 
   // A capture the map cannot say anything about says so, rather than
   // drawing an empty box.
@@ -289,7 +317,7 @@ export function NetworkMap({
           <span className="key key-normal" /> completed
         </span>
         <span className="map-zoom">
-          <button type="button" className="open-button ghost" onClick={() => setView({ x: 0, y: 0, scale: 1 })}>
+          <button type="button" className="open-button ghost" onClick={() => setView(home)}>
             Fit
           </button>
         </span>
@@ -355,7 +383,15 @@ export function NetworkMap({
                 onClick={() => setSelected(selected === node.id ? null : node.id)}
               >
                 <circle r={radius(node)} />
-                <text y={radius(node) + 13} textAnchor="middle">
+                {/* An address nobody can read is not a label. These were
+                    fixed at 8 user units, which came out around six and a
+                    half pixels on screen; sized against the current zoom
+                    they stay legible however far in or out you are. */}
+                <text
+                  y={radius(node) + 15 / view.scale}
+                  textAnchor="middle"
+                  fontSize={(selected === node.id ? 13 : 12) / view.scale}
+                >
                   {node.mac ? `${node.mac} | ${node.id}` : node.id}
                 </text>
                 <title>

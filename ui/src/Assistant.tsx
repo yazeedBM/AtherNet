@@ -100,14 +100,19 @@ export function Assistant({
             Asking about <strong>{capture.file}</strong>
           </p>
 
-          <div className="modes" role="radiogroup" aria-label="What may leave this machine">
+          {/* Three mutually exclusive options are a segmented control, and
+              the app already has one for Plain/Details/Raw. Drawn as loose
+              chips they looked like three filters you could combine, which
+              is exactly the wrong thing to be unclear about when the
+              question is how much of a capture leaves the machine. */}
+          <div className="depth modes" role="radiogroup" aria-label="What may leave this machine">
             {MODES.map((option) => (
               <button
                 type="button"
                 key={option}
                 role="radio"
                 aria-checked={mode === option}
-                className={`chip ${mode === option ? 'is-on' : ''}`}
+                className={`depth-item ${mode === option ? 'is-on' : ''}`}
                 onClick={() => setMode(option)}
               >
                 {MODE_NAME[option]}

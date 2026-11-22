@@ -1,10 +1,26 @@
 /* The conversation list and the packet explorer. */
 
+/* This row was the reason the whole page scrolled sideways on a phone:
+ * six tabs that would not wrap, pushing the document to 497px inside a
+ * 375px window, so every panel on the screen sat in a column with dead
+ * space beside it. The tabs scroll inside their own strip now and the
+ * page does not move. */
 .views {
   display: flex;
   gap: 4px;
   padding: 0 20px;
   border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.views::-webkit-scrollbar {
+  display: none;
+}
+
+.view-tab {
+  flex: none;
+  white-space: nowrap;
 }
 
 /* The underline grows from the middle rather than appearing. It is the
@@ -17,7 +33,7 @@
   padding: var(--s-4) var(--s-4) var(--s-4);
   color: var(--muted);
   font-size: var(--text-md);
-  font-weight: 550;
+  font-weight: 500;
   transition: color var(--fast) var(--ease);
 }
 
@@ -40,7 +56,7 @@
 
 .view-tab.is-on {
   color: var(--ink);
-  font-weight: 620;
+  font-weight: 600;
 }
 
 .view-tab.is-on::after {
@@ -142,6 +158,18 @@
 .explorer-count {
   font-size: var(--text-sm);
   white-space: nowrap;
+}
+
+/* The filter row's input asked for 240px and then sat next to a button and
+ * a count, which on a phone is more than the window has - so the row
+ * pushed the whole document sideways. It gives up its minimum here and
+ * wraps instead. */
+@media (max-width: 560px) {
+  .search.small,
+  .table-bar .search.small {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
 }
 
 .explorer-cap {
@@ -354,6 +382,6 @@
 }
 
 .sort-mark {
-  font-size: 9px;
+  font-size: var(--text-xs);
   width: 8px;
 }

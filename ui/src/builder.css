@@ -126,8 +126,13 @@
 
 .builder-save {
   display: flex;
-  gap: 8px;
+  gap: var(--s-3);
   align-items: center;
+}
+
+.builder-save-label {
+  font-size: var(--text-sm);
+  color: var(--muted);
 }
 
 .builder-save .search.small {

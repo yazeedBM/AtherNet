@@ -231,6 +231,7 @@ export function AddressingTable({ capture }: { capture: Capture }) {
             <input
               className="search small"
               type="search"
+              aria-label="Filter addresses"
               value={text}
               placeholder="Filter by address, hardware address or evidence"
               onChange={(e) => setText(e.target.value)}
@@ -429,6 +430,7 @@ export function PacketExplorer({
         <input
           className="search small"
           type="search"
+          aria-label="Filter packets"
           value={text}
           placeholder="Filter packets by address, port or protocol"
           onChange={(e) => {

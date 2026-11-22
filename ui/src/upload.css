@@ -71,7 +71,7 @@
   border-radius: 6px;
   padding: 8px 12px;
   font-size: var(--text-md);
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .open-button:hover {
@@ -142,28 +142,40 @@
 
 /* ---------------------------------------------------------- empty state */
 
+/* Not centred in the window. The first screen used to be a dashed box
+ * floating in the middle of a very large dark rectangle, with every line
+ * inside it centred - which is the shape a first screen takes when it is
+ * assembled rather than laid out, and it put the one thing you have to do
+ * in the middle of nowhere. It starts where the page starts now, and the
+ * text is ranged left so the eye has one edge to come back to. */
 .work.empty {
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  display: block;
+  padding: var(--s-8) var(--s-6);
 }
 
+/* The dashes are gone too. A dashed outline means "drop here", and this
+ * box was never the drop target - the whole window is, and it already
+ * draws its own outline while something is over it. A permanent dashed
+ * border around a panel you cannot drop onto is decoration that lies. */
 .dropzone {
-  max-width: 560px;
-  text-align: center;
-  border: 2px dashed var(--line);
-  border-radius: 12px;
-  padding: 40px 32px;
-  background: var(--panel);
+  max-width: 62ch;
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0;
+  background: none;
 }
 
 .dropzone h1 {
-  margin: 0 0 10px;
-  font-size: var(--text-xl);
+  margin: 0 0 var(--s-4);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
 }
 
 .dropzone .lead {
-  margin: 0 0 20px;
+  margin: 0 0 var(--s-6);
+  font-size: var(--text-base);
   color: var(--muted);
   line-height: 1.55;
 }
@@ -177,21 +189,23 @@
 
 .dropzone-actions {
   display: flex;
-  gap: 8px;
-  justify-content: center;
+  gap: var(--s-3);
   flex-wrap: wrap;
-  margin-bottom: 22px;
+  margin-bottom: var(--s-7);
 }
 
+/* The privacy note is the best paragraph on this screen and it was sitting
+ * in a grey tray, which is where interfaces put the text they expect
+ * nobody to read. It gets a rule and the room to be read instead. */
 .privacy {
-  text-align: left;
   font-size: var(--text-md);
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--muted);
-  background: var(--info-bg);
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin: 0 0 16px;
+  background: none;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+  padding: 0 0 0 var(--s-5);
+  margin: 0 0 var(--s-6);
 }
 
 .privacy strong {

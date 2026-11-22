@@ -6,9 +6,14 @@
 }
 
 .modes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  width: 100%;
+}
+
+.modes .depth-item {
+  flex: 1;
+  text-align: center;
+  font-size: var(--text-sm);
+  padding: var(--s-3) var(--s-2);
 }
 
 .mode-note {

@@ -59,10 +59,15 @@
   grid-template-columns: minmax(0, 1fr) 320px;
 }
 
+/* This was a hardcoded #090d12, which made the map a black rectangle in
+ * the middle of a white page in light mode - the only black thing in the
+ * app, and the first thing your eye went to. The canvas is a surface like
+ * any other now, one step back from the panel it sits in, in both
+ * schemes. */
 .map-svg {
   width: 100%;
   height: auto;
-  background: #090d12;
+  background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   cursor: grab;
@@ -108,17 +113,16 @@
 }
 
 .node circle {
-  /* The palette's blue, lightened so a node reads as an object on the
-     near-black rather than as a hole in it. */
-  fill: #5c76a0;
+  /* The palette's blue. It has to read as an object on the canvas in both
+     schemes, so it is mixed against the canvas rather than fixed. */
+  fill: color-mix(in srgb, var(--accent) 70%, var(--bg));
   stroke: var(--accent);
   stroke-width: 1.5;
 }
 
 .node text {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 8px;
-  fill: #8d99aa;
+  fill: var(--muted);
   pointer-events: none;
 }
 
@@ -137,13 +141,12 @@
 }
 
 .node.is-chosen circle {
-  stroke: #eceff3;
+  stroke: var(--ink);
   stroke-width: 3;
 }
 
 .node.is-chosen text {
-  fill: #eceff3;
-  font-size: 9px;
+  fill: var(--ink);
 }
 
 .node.is-dim {

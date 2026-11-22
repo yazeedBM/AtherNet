@@ -159,10 +159,17 @@ export function FilterBuilder({
         <strong>Showing:</strong> {describe(filter)}
       </p>
 
+      {/* This one is a form field, not a search box, and it had no label
+          at all - only a placeholder, which is gone the moment you start
+          typing and is the thing you most want to re-read while you do. */}
       <div className="builder-save">
+        <label className="builder-save-label" htmlFor="filter-name">
+          Name
+        </label>
         <input
+          id="filter-name"
           className="search small"
-          placeholder="Name this filter to keep it"
+          placeholder="e.g. off-network only"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
