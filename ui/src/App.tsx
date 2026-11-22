@@ -786,7 +786,7 @@ function EmptyState({
   onLoadExamples: () => void;
 }) {
   return (
-    <main className="work empty">
+    <main className="work is-empty">
       <div className="dropzone">
         <h1>Open a capture</h1>
         <p className="lead">

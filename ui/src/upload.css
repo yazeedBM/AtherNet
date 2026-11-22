@@ -168,7 +168,13 @@
  * because that is what this screen is: the instrument's face with nothing
  * on it yet. The grid says what kind of thing you are looking at before
  * you have given it anything to read. */
-.work.empty {
+/* "is-empty", not "empty": this element also carried the bare class
+   .empty, which belongs to the "nothing matches this filter" line inside
+   a findings table - so the opening screen was quietly inheriting that
+   paragraph's 60ch measure and its muted grey. It looked survivable while
+   the headline was small. It was never right. State modifiers in this app
+   are spelled is-*; this one now is too. */
+.work.is-empty {
   display: block;
   padding: var(--s-8) var(--s-7);
   background:
@@ -179,15 +185,16 @@
 
 /* A standing line at the top of the empty face, the way a scope shows a
    flat trace when nothing is connected: the instrument is on and it is
-   reading nothing. */
+   reading nothing. Under a display-sized line it does a second job, the
+   one a rule does over a masthead - it gives the type something to sit
+   on, so the headline starts rather than merely begins. */
 .dropzone::before {
   content: '';
   display: block;
   height: 1px;
   width: 100%;
-  max-width: 34ch;
-  background: linear-gradient(to right, var(--accent), transparent);
-  margin-bottom: var(--s-6);
+  background: linear-gradient(to right, var(--accent), transparent 85%);
+  margin-bottom: var(--s-5);
 }
 
 /* The dashes are gone too. A dashed outline means "drop here", and this
@@ -195,26 +202,44 @@
  * draws its own outline while something is over it. A permanent dashed
  * border around a panel you cannot drop onto is decoration that lies. */
 .dropzone {
-  max-width: 64ch;
+  max-width: 68ch;
   border: 0;
   border-radius: var(--radius);
   padding: 0;
   background: none;
 }
 
+/* The one line in this app where type is the layout.
+ *
+ * It was 34px, which on a 1280px window is just the largest thing on a
+ * mostly empty screen - big enough to be a heading and not big enough to
+ * be the point. A screen with one job can let its one sentence carry the
+ * whole page, and at display size the usual rules invert: tracking comes
+ * in, leading drops below the cap height's own gap, and weight goes DOWN,
+ * because mass at this size comes from the size. 600 here would shout;
+ * 500 states it. */
 .dropzone h1 {
   margin: 0 0 var(--s-5);
-  font-size: var(--text-2xl);
+  font-size: var(--text-display);
   font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
+  letter-spacing: -0.035em;
+  line-height: 0.98;
+  max-width: 14ch;
 }
 
+/* A standfirst, not body copy: it answers the headline, so it steps up
+   from the prose below it and keeps a measure short enough to read in one
+   go. */
 .dropzone .lead {
   margin: 0 0 var(--s-6);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   color: var(--muted);
-  line-height: 1.55;
+  line-height: 1.45;
+  max-width: 46ch;
+}
+
+.dropzone .lead code {
+  font-size: 0.8em;
 }
 
 .dropzone code {
@@ -261,8 +286,20 @@
 }
 
 @media (max-width: 760px) {
-  .dropzone {
-    padding: 28px 18px;
+  /* The dropzone carries no padding of its own any more - the screen
+     around it does - so this rule was pushing the headline in by 18px on
+     top of the page's own gutter. */
+  .work.is-empty {
+    padding: var(--s-6) var(--s-5);
+  }
+
+  /* The headline clamps down to 38px here, and a 20px standfirst beside
+     it is half its size rather than a third: the two stop reading as a
+     headline and a line answering it. The standfirst steps back to body
+     size and the ladder holds. */
+  .dropzone .lead {
+    font-size: var(--text-base);
+    line-height: 1.5;
   }
 }
 

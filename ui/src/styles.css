@@ -101,6 +101,17 @@
   --text-xl: 26px;
   --text-2xl: 34px;
 
+  /* One step above the scale, and the only one on it that is not a fixed
+   * number. There is exactly one place in this app where type is the
+   * layout rather than a label on it - the line on the opening screen -
+   * and at 34px it was merely the biggest thing present rather than the
+   * thing the screen is about. A display size has to be set against the
+   * window it lives in, not against the scale, so this one is fluid: it
+   * fills a desktop and gets out of the way on a phone. If a second use
+   * for it ever appears, that is the signal it has become a scale step and
+   * wants a fixed value. */
+  --text-display: clamp(38px, 6.4vw, 66px);
+
   /* Space, on a four-pixel grid. There were twenty distinct values in here
    * - 5px, 7px, 11px, 18px, 22px - which is what happens when each number
    * is chosen on its own. */
