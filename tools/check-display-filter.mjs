@@ -10,48 +10,43 @@
 // moves - fix your filter, or believe the result. Several of the cases below
 // are there only to pin down which of the two the app says.
 //
-// The parser is TypeScript in the front end, so it is bundled with esbuild
-// (present once `npm ci` has run in ui/) and exercised as a module.
+// The parser is TypeScript in the front end, and node runs it directly: since
+// 22.18 it strips type annotations rather than needing them compiled away.
+// That keeps this gate a plain script with no build step, no bundler and no
+// dependency on ui/node_modules, so it can run beside the other gates instead
+// of waiting for an install.
+//
+// It costs one constraint, which display-filter.ts is written to meet: only
+// syntax that can be *erased*, so no enums, no namespaces, and no constructor
+// parameter properties. Its imports from ./filter and ./report are type-only
+// and disappear with the annotations, so nothing else is loaded.
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
-const ui = join(root, 'ui');
-const out = mkdtempSync(join(tmpdir(), 'athernet-df-'));
-const bundle = join(out, 'display-filter.mjs');
+const source = join(root, 'ui', 'src', 'display-filter.ts');
 
-// esbuild's own entry script, run with this node. Going through `npx` would
-// mean spawning a .cmd shim on Windows, which needs a shell - and a shell in
-// the middle of a build step is a portability problem waiting to happen.
-const esbuild = join(ui, 'node_modules', 'esbuild', 'bin', 'esbuild');
-if (!existsSync(esbuild)) {
-  console.error('esbuild is not installed - run `npm ci` in ui/ first.');
-  process.exit(1);
-}
+let parseDisplayFilter;
+let toFilter;
+let dnfOfFilter;
+let andDnf;
+let conversationTruth;
+let findingTruth;
 
 try {
-  execFileSync(
-    process.execPath,
-    [esbuild, 'src/display-filter.ts', '--bundle', '--format=esm', `--outfile=${bundle}`, '--log-level=warning'],
-    { cwd: ui, stdio: 'inherit' },
+  ({ parseDisplayFilter, toFilter, dnfOfFilter, andDnf, conversationTruth, findingTruth } =
+    await import(pathToFileURL(source).href));
+} catch (e) {
+  console.error(`could not load ${source}`);
+  console.error(e?.message ?? e);
+  console.error(
+    '\nIf this says the syntax is unsupported, node is older than 22.18 or the\n' +
+      'parser has grown syntax that cannot be erased - see the note at the top\n' +
+      'of this file.',
   );
-} catch {
-  console.error('the display filter did not compile.');
   process.exit(1);
 }
-
-const {
-  parseDisplayFilter,
-  toFilter,
-  dnfOfFilter,
-  andDnf,
-  conversationTruth,
-  findingTruth,
-} = await import(pathToFileURL(bundle).href);
 
 let pass = 0;
 const failures = [];
@@ -267,8 +262,6 @@ check(
   ['any_addr is 93.184.216.34 & flag has SYN'],
 );
 check('a filter survives the round trip', show(dnfOfFilter(toFilter({ dnf: typed, source: '' }))), show(typed));
-
-rmSync(out, { recursive: true, force: true });
 
 for (const failure of failures) console.log(`  FAIL ${failure}`);
 console.log(

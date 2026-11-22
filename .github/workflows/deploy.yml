@@ -74,6 +74,12 @@ jobs:
       - name: Run the gates
         run: node tools/check-corpus.mjs
 
+      # The filter bar reads Wireshark syntax, and a filter that is misread
+      # matches nothing - which looks exactly like a capture in which nothing
+      # matched. This pins down which of the two the app says.
+      - name: Check the display filter
+        run: node tools/check-display-filter.mjs
+
       - name: Compile the core for the browser
         run: node tools/build-wasm.mjs
 
@@ -83,11 +89,6 @@ jobs:
       - name: Install the front end
         run: npm ci
         working-directory: ui
-
-      # Runs here rather than with the other gates because it compiles a
-      # front-end module, which needs ui/node_modules to exist.
-      - name: Check the display filter
-        run: node tools/check-display-filter.mjs
 
       - name: Build the site
         run: npm run build

@@ -270,8 +270,15 @@ const isAddressy = (s: string) =>
 
 class Parser {
   private at = 0;
+  private readonly tokens: Token[];
 
-  constructor(private readonly tokens: Token[]) {}
+  // Written out rather than as a constructor parameter property, which is the
+  // one piece of TypeScript that cannot simply be erased - and this file is
+  // run directly by the gate in tools/, on a node that strips types rather
+  // than compiles them.
+  constructor(tokens: Token[]) {
+    this.tokens = tokens;
+  }
 
   parse(): Ast {
     const node = this.or();
