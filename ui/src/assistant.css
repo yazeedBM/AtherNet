@@ -2,7 +2,7 @@
 
 .assistant-about {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .modes {
@@ -13,7 +13,7 @@
 
 .mode-note {
   margin: 8px 0 12px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -42,7 +42,7 @@
 
 .reply h4 {
   margin: 14px 0 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -54,7 +54,7 @@
 
 .reply-unsure {
   margin: 0 0 12px;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.5;
   background: var(--warning-bg);
   color: var(--warning);
@@ -68,7 +68,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.55;
 }
 
@@ -87,7 +87,7 @@
 }
 
 .cite {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   border: 1px solid var(--line);
   background: var(--info-bg);
@@ -111,7 +111,7 @@
 
 .assistant-source {
   margin: 16px 0 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--muted);
   background: var(--info-bg);
@@ -121,7 +121,7 @@
 
 .redactions {
   margin: 10px 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .pack {
@@ -131,7 +131,7 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;

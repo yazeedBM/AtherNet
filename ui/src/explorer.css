@@ -7,14 +7,31 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* The underline grows from the middle rather than appearing. It is the
+ * one piece of motion that tells you something - which tab you came from -
+ * rather than decorating the wait. */
 .view-tab {
+  position: relative;
   background: none;
   border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 10px 12px;
+  padding: var(--s-4) var(--s-4) var(--s-4);
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 550;
+  transition: color var(--fast) var(--ease);
+}
+
+.view-tab::after {
+  content: '';
+  position: absolute;
+  left: var(--s-4);
+  right: var(--s-4);
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  transform: scaleX(0);
+  transition: transform var(--slow) var(--ease);
 }
 
 .view-tab:hover {
@@ -23,12 +40,16 @@
 
 .view-tab.is-on {
   color: var(--ink);
-  border-bottom-color: var(--accent);
+  font-weight: 620;
+}
+
+.view-tab.is-on::after {
+  transform: scaleX(1);
 }
 
 .empty-note {
   margin: 12px 0;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 /* ------------------------------------------------------------------ grids */
@@ -36,25 +57,32 @@
 .grid {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .grid th {
   text-align: left;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
   color: var(--muted);
-  padding: 6px 10px;
+  padding: var(--s-3) var(--s-4);
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
-  background: var(--panel);
+  background: var(--raised);
 }
 
 .grid td {
-  padding: 6px 10px;
+  padding: var(--s-3) var(--s-4);
   border-bottom: 1px solid var(--line);
   vertical-align: top;
+}
+
+/* The last row's rule has nothing under it to separate from. */
+.grid tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .grid .num {
@@ -64,11 +92,15 @@
 
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .grid.packets tbody tr {
   cursor: pointer;
+}
+
+.grid.packets tbody tr {
+  transition: background var(--fast) var(--ease);
 }
 
 .grid.packets tbody tr:hover {
@@ -81,7 +113,7 @@
 
 .grid .summary {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 
@@ -104,17 +136,17 @@
   flex: 1;
   min-width: 240px;
   padding: 7px 10px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .explorer-count {
-  font-size: 12px;
+  font-size: var(--text-sm);
   white-space: nowrap;
 }
 
 .explorer-cap {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.5;
   background: var(--info-bg);
   border-radius: 8px;
@@ -143,7 +175,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .pager button:disabled {
@@ -172,7 +204,7 @@
 
 .packet-detail h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--text-base);
 }
 
 .packet-detail .rail-close {
@@ -187,7 +219,7 @@
 
 .layer h4 {
   margin: 0 0 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -204,7 +236,7 @@
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .layer dt {
@@ -219,7 +251,7 @@
 .hex {
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   line-height: 1.6;
   overflow-x: auto;
 }
@@ -255,7 +287,7 @@
 
 .addressing-head {
   margin: 22px 0 4px;
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 
 .export {
@@ -274,7 +306,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .export-actions {
@@ -285,7 +317,7 @@
 }
 
 .export-size {
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .export-preview {
@@ -298,7 +330,7 @@
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .table-bar .search.small {

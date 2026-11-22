@@ -38,7 +38,7 @@
   border: 0;
   border-radius: 6px;
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--text-base);
   line-height: 1;
   padding: 6px 8px;
   /* Hidden until the row is hovered or the button itself has focus, so the
@@ -70,7 +70,7 @@
   color: var(--ink);
   border-radius: 6px;
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 550;
 }
 
@@ -107,7 +107,7 @@
 }
 
 .progress-text {
-  font-size: 13px;
+  font-size: var(--text-md);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -134,7 +134,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--text-md);
   background: var(--warning-bg);
   color: var(--warning);
   border-bottom: 1px solid var(--line);
@@ -159,7 +159,7 @@
 
 .dropzone h1 {
   margin: 0 0 10px;
-  font-size: 22px;
+  font-size: var(--text-xl);
 }
 
 .dropzone .lead {
@@ -172,7 +172,7 @@
   background: var(--info-bg);
   border-radius: 4px;
   padding: 1px 5px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .dropzone-actions {
@@ -185,7 +185,7 @@
 
 .privacy {
   text-align: left;
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1.55;
   color: var(--muted);
   background: var(--info-bg);
@@ -218,7 +218,7 @@
   align-items: flex-start;
   gap: 7px;
   padding: 10px 8px 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   cursor: pointer;
 }

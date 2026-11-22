@@ -35,7 +35,46 @@
   --info: #5e6878;
   --info-bg: #eef0f3;
 
+  /* Type. Seven steps on a ratio, not the eleven arbitrary sizes this
+   * stylesheet grew. The jumps matter more than the values: a heading that
+   * is one point larger than body text is not a heading, it is an accident,
+   * and that is the clearest tell of an interface nobody drew. */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 15px;
+  --text-lg: 19px;
+  --text-xl: 26px;
+  --text-2xl: 34px;
+
+  /* Space, on a four-pixel grid. There were twenty distinct values in here
+   * - 5px, 7px, 11px, 18px, 22px - which is what happens when each number
+   * is chosen on its own. */
+  --s-1: 2px;
+  --s-2: 4px;
+  --s-3: 8px;
+  --s-4: 12px;
+  --s-5: 16px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 48px;
+
+  /* Three depths, so that not everything is a box with the same outline.
+   * A panel sitting on the page and a drawer floating over it should not
+   * look alike. */
+  --raised: #ffffff;
+  --floating: #ffffff;
+  --shadow-1: 0 1px 2px rgb(26 32 41 / 0.06), 0 1px 1px rgb(26 32 41 / 0.04);
+  --shadow-2: 0 12px 32px rgb(26 32 41 / 0.14), 0 2px 8px rgb(26 32 41 / 0.08);
+
+  /* One curve and two durations. Motion that varies for no reason reads as
+   * nervous. */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 110ms;
+  --slow: 220ms;
+
   --radius: 8px;
+  --radius-sm: 5px;
   color-scheme: light dark;
 }
 
@@ -59,6 +98,11 @@
     --warning-bg: #35281a;
     --info: #96a1b2;
     --info-bg: #1c232d;
+
+    --raised: #161d26;
+    --floating: #1e2733;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 16px 40px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.4);
   }
 }
 
@@ -70,7 +114,32 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: var(--text-md) / 1.55 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Every figure in this app is a count, a port, a length or a byte, and
+   * they belong in columns. Proportional digits make a packet list look
+   * like prose; one declaration here fixes every table at once. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One focus ring, visible on every surface, on the whole app. The default
+ * is invisible against a dark panel, and a keyboard user cannot use what
+ * they cannot see. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Anyone who has asked their system for less movement gets none of it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 button {
@@ -110,17 +179,22 @@ button {
   gap: 2px;
 }
 
+/* A wordmark, not a heading: larger, tracked tight, with the subtitle
+ * dropped well back so the two read as one mark rather than two lines of
+ * text that happen to be stacked. */
 .brand {
   font-weight: 650;
-  font-size: 16px;
-  padding: 4px 8px 16px;
+  font-size: var(--text-lg);
+  letter-spacing: -0.03em;
+  padding: var(--s-2) var(--s-3) var(--s-5);
   display: flex;
   flex-direction: column;
+  gap: var(--s-1);
 }
 
 .brand-sub {
   font-weight: 400;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 
@@ -154,13 +228,13 @@ button {
 
 .rail-count {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .rail-note {
   margin-top: auto;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   padding: 12px 8px 0;
   border-top: 1px solid var(--line);
 }
@@ -207,15 +281,26 @@ button {
   border: 1px solid var(--line);
   background: var(--bg);
   border-radius: 999px;
-  padding: 5px 11px;
+  padding: var(--s-2) var(--s-4);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: var(--s-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .chip.is-on {
   border-color: currentColor;
+  background: color-mix(in srgb, currentColor 16%, transparent);
   font-weight: 600;
 }
 
@@ -245,7 +330,7 @@ button {
   border: 0;
   background: var(--bg);
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .depth-item.is-on {
@@ -272,56 +357,85 @@ button {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+  /* Narrow enough that the six tiles this app shows sit on one line at a
+     normal window width. At 150px the last one wrapped alone, which looks
+     like a layout nobody checked rather than a decision. */
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: var(--s-3);
 }
 
+/* No border. A raised surface and a shadow say the same thing without
+ * drawing a line around everything on the page. */
 .card {
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background: var(--raised);
+  border: 0;
   border-radius: var(--radius);
-  padding: 12px 14px;
+  padding: var(--s-4) var(--s-5);
+  box-shadow: var(--shadow-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
 }
 
+/* The number is the point of the tile, so it is given the size and the
+ * tight tracking that large type wants, and the label is dropped right
+ * back. These were two steps apart; now they are four. */
 .card-value {
-  font-size: 22px;
-  font-weight: 650;
+  font-size: var(--text-xl);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .card-label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 550;
 }
 
+/* A rule down the edge rather than a box: it marks the tile without
+ * repainting it, and it reads at the edge of vision. */
 .card-error {
-  border-color: var(--error);
-  background: var(--error-bg);
+  box-shadow: inset 3px 0 0 var(--error), var(--shadow-1);
+}
+
+.card-error .card-value {
+  color: var(--error);
 }
 
 .card-info {
-  background: var(--info-bg);
+  box-shadow: inset 3px 0 0 var(--info), var(--shadow-1);
 }
 
 /* ---------------------------------------------------------------- capture */
 
 .capture,
 .issues {
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background: var(--raised);
+  border: 0;
   border-radius: var(--radius);
-  padding: 16px 18px;
+  padding: var(--s-5) var(--s-6);
+  box-shadow: var(--shadow-1);
 }
 
+/* Large type wants tighter tracking and small uppercase wants looser. It
+ * is the cheapest typographic move there is and the one whose absence
+ * makes a page look untouched. */
 h2 {
-  font-size: 15px;
-  margin: 0 0 12px;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--s-4);
 }
 
 h3 {
-  font-size: 13px;
-  margin: 18px 0 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  margin: var(--s-6) 0 var(--s-3);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   color: var(--muted);
 }
 
@@ -352,7 +466,7 @@ h3 {
 
 .facts dt {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .facts dd {
@@ -363,7 +477,7 @@ h3 {
   margin: 14px 0 0;
   padding: 10px 12px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .banner-info {
@@ -374,7 +488,7 @@ h3 {
 .bindings {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .bindings th,
@@ -391,29 +505,43 @@ h3 {
 
 /* ----------------------------------------------------------------- issues */
 
+/* The rows were a stack of identical outlined boxes with a gap between
+ * them, which is the shape a list takes when nobody decides what it should
+ * look like. They are one surface now, divided by hairlines, the way every
+ * list of records in a real tool is drawn. */
 .issue-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.issue-list li + li .issue {
+  border-top: 1px solid var(--line);
 }
 
 .issue {
   width: 100%;
   display: flex;
-  gap: 12px;
+  gap: var(--s-4);
   align-items: flex-start;
   text-align: left;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 11px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: var(--s-4) var(--s-4);
+  transition: background var(--fast) var(--ease);
+  /* Held open so the marker on hover does not shift the text sideways. */
+  box-shadow: inset 2px 0 0 transparent;
 }
 
 .issue:hover {
-  border-color: var(--accent);
+  background: var(--info-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .issue-body {
@@ -425,6 +553,9 @@ h3 {
 
 .issue-title {
   font-weight: 600;
+  font-size: var(--text-base);
+  letter-spacing: -0.005em;
+  line-height: 1.4;
 }
 
 .issue-meta {
@@ -432,7 +563,7 @@ h3 {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .empty {
@@ -445,7 +576,7 @@ h3 {
   align-items: center;
   gap: 6px;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 999px;
@@ -460,7 +591,7 @@ h3 {
   border-radius: 50%;
   background: currentColor;
   color: var(--panel);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -481,7 +612,7 @@ h3 {
 
 /* Confidence is a separate axis from severity. */
 .conf {
-  font-size: 12px;
+  font-size: var(--text-sm);
   padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -500,21 +631,44 @@ h3 {
 
 /* ----------------------------------------------------------------- drawer */
 
+/* The drawer used to appear, fully formed, with the page already dimmed.
+ * Sliding it in from the edge it belongs to costs two keyframes and tells
+ * the reader where it came from, so closing it does not feel like
+ * something vanished. */
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+}
+
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(10, 10, 6, 0.32);
+  background: rgb(6 9 13 / 0.55);
+  backdrop-filter: blur(2px);
   display: flex;
   justify-content: flex-end;
   z-index: 5;
+  animation: backdrop-in var(--fast) var(--ease);
 }
 
+/* Floating, not raised: the deepest surface the app has, with the shadow
+ * to match, so it reads as being over the page rather than part of it. */
 .drawer {
   width: min(560px, 100%);
-  background: var(--panel);
-  border-left: 1px solid var(--line);
-  padding: 18px 22px 40px;
+  background: var(--floating);
+  border-left: 0;
+  box-shadow: var(--shadow-2);
+  padding: var(--s-6) var(--s-6) var(--s-8);
   overflow-y: auto;
+  animation: drawer-in var(--slow) var(--ease);
 }
 
 .drawer-head {
@@ -525,7 +679,7 @@ h3 {
 }
 
 .drawer h2 {
-  font-size: 18px;
+  font-size: var(--text-lg);
   margin: 0 0 4px;
 }
 
@@ -533,7 +687,7 @@ h3 {
   margin-left: auto;
   border: 0;
   background: none;
-  font-size: 15px;
+  font-size: var(--text-base);
   color: var(--muted);
   padding: 4px 6px;
 }
@@ -555,12 +709,12 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .frame {
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--accent);
 }
 
@@ -574,7 +728,7 @@ h3 {
 
 .timeline-scale {
   margin: 6px 0 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 
@@ -592,7 +746,7 @@ h3 {
   padding: 10px 12px;
   background: var(--info-bg);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 
@@ -601,7 +755,7 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   overflow-x: auto;
 }
 
@@ -624,7 +778,7 @@ h3 {
 }
 
 .assistant-note {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   background: var(--info-bg);
   padding: 10px;
@@ -636,12 +790,12 @@ h3 {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 12px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .bubble h4 {
   margin: 12px 0 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -669,13 +823,13 @@ h3 {
   display: block;
   margin-top: 3px;
   font-family: ui-monospace, Consolas, monospace;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--accent);
 }
 
 .assistant-limit {
   margin: 12px 0 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   border-top: 1px solid var(--line);
   padding-top: 8px;
@@ -683,7 +837,7 @@ h3 {
 
 .assistant-privacy {
   margin-top: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   border-top: 1px solid var(--line);
   padding-top: 10px;
