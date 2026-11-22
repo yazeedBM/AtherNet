@@ -401,6 +401,39 @@
   max-height: 52vh;
 }
 
+/* Which table the preview is showing. Its own row, because it belongs to the
+ * preview below it rather than to the format controls above. */
+.export-sheets {
+  margin-bottom: var(--s-3);
+}
+
+/* What the preview is, when the file is not the preview's own bytes. The
+ * panel's promise used to be that they were the same string; for a PDF, a
+ * Word file or a spreadsheet they cannot be, and saying so is cheaper than
+ * letting somebody find out. */
+.export-caveat {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  border-left: 2px solid var(--line);
+  padding-left: var(--s-4);
+  margin: 0 0 var(--s-4);
+}
+
+.export-table-wrap {
+  max-height: 52vh;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+
+.export-table-wrap .grid {
+  font-size: var(--text-sm);
+}
+
+.export-more {
+  font-size: var(--text-sm);
+  padding: var(--s-3) 0;
+}
+
 .table-bar {
   display: flex;
   align-items: center;

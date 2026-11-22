@@ -1,0 +1,128 @@
+/* Printing, which is how this app makes a PDF.
+ *
+ * Not by writing a PDF encoder. The browser already has one, it embeds the
+ * fonts, it breaks pages, it handles every script the capture might contain,
+ * and it keeps the file on the machine - which a rendering service would not.
+ * The whole feature is therefore a stylesheet, and the work is deciding what
+ * a printed page should hold rather than how to draw it.
+ *
+ * What prints is the summary, on paper. The screen's chrome - the rail, the
+ * filter bar, the tabs, the buttons - is navigation, and navigation on paper
+ * is just ink. */
+
+@media print {
+  /* Paper is white and ink is black, whatever the screen was doing. A dark
+   * theme sent to a printer is forty pages of toner and an unreadable page
+   * for anyone who prints it to read rather than to file. */
+  :root,
+  :root[data-theme='dark'],
+  :root[data-theme='light'] {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --ink: #111111;
+    --muted: #333333;
+    --dim: #555555;
+    --line: #bbbbbb;
+    --accent: #1a4f8a;
+    --error: #8a1f2c;
+    --warning: #7a4a00;
+    --info: #333333;
+    --error-bg: #ffffff;
+    --warning-bg: #ffffff;
+    --info-bg: #ffffff;
+  }
+
+  @page {
+    margin: 18mm 16mm;
+  }
+
+  html,
+  body {
+    background: #ffffff;
+    color: #111111;
+    height: auto;
+    overflow: visible;
+  }
+
+  /* Everything that is a control rather than a finding. */
+  .rail,
+  .filterbar,
+  .view-tabs,
+  .export-controls,
+  .export-actions,
+  .assistant,
+  .progress,
+  .rail-actions,
+  .map-bar,
+  .depth,
+  .shortcuts,
+  .filter-reading,
+  .explorer-bar,
+  .pager,
+  button {
+    display: none !important;
+  }
+
+  /* The shell is a fixed grid on screen; on paper it is one column that runs
+   * as long as it needs to. */
+  .shell,
+  .work,
+  .issues,
+  .export {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    grid-template-columns: none !important;
+  }
+
+  /* The preview is the document. It is a <pre> on screen, which on paper
+   * would run off the right edge and clip. */
+  .export-preview {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 10pt;
+    line-height: 1.45;
+    border: 0;
+    padding: 0;
+    background: none;
+    color: #111111;
+  }
+
+  /* A finding should not be split across a page break if it can be helped,
+   * because its confidence line is what stops the title being read as a
+   * certainty - and a page break between the two is how that happens. */
+  .finding,
+  .issue-row,
+  .claim {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+    color: #111111;
+  }
+
+  /* A link's text is all a reader on paper gets, so an underline that says
+   * "there was a link here" is noise. */
+  a {
+    color: #111111;
+    text-decoration: none;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th,
+  td {
+    border: 1px solid #bbbbbb;
+    padding: 4px 6px;
+    font-size: 9.5pt;
+  }
+}

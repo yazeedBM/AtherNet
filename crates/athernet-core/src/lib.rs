@@ -43,7 +43,7 @@ pub use assistant::{answer, check_citations, evidence_pack, PrivacyMode, Redacto
 pub use capture::{CaptureError, CaptureFile, Format, LinkType, PacketRef};
 pub use decode::{decode, Decoded, NetLayer, TcpOptions, TransportLayer, TCP_ACK, TCP_FIN, TCP_RST, TCP_SYN};
 pub use detect::{Analysis, CaptureLimits};
-pub use export::{export, ExportFormat};
+pub use export::{export, export_tables, ExportFormat};
 pub use filter::Filter;
 pub use findings::{Confidence, Evidence, Finding, Severity};
 pub use flow::{Addr, FlowKey, FlowStats, FlowTable};

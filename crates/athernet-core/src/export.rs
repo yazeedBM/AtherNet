@@ -408,6 +408,214 @@ fn format_mac(mac: &[u8; 6]) -> String {
         .join(":")
 }
 
+// ------------------------------------------------------------ the tables
+//
+// A spreadsheet wants rows, not prose, so this is a second shape for the same
+// capture rather than a second format for the summary above. The narrative
+// answers "what went wrong"; this answers "give me the data and let me sort
+// it", which is a different and equally legitimate request.
+//
+// It is written here, in the core, for one reason: every value a reader ever
+// sees has to pass the same `Redactor`. Assembling the rows in the front end
+// from the JSON report would route them around it, and a spreadsheet of real
+// addresses emailed to a vendor is exactly the leak the redactor exists to
+// prevent. The front end receives this already-redacted and only reshapes it.
+
+/// The separator for the table wire format.
+///
+/// Tab-separated rather than CSV because the escaping rules for CSV belong in
+/// one place, and that place is the writer that produces the file people
+/// actually open. Here a tab or a newline inside a value would break the
+/// format, so they are turned into spaces: no address, hostname, protocol or
+/// outcome contains either, and a value that somehow did is still readable.
+fn cell(value: &str) -> String {
+    value
+        .chars()
+        .map(|c| if c == '\t' || c == '\n' || c == '\r' { ' ' } else { c })
+        .collect()
+}
+
+struct Tables {
+    out: String,
+}
+
+impl Tables {
+    fn table(&mut self, name: &str, columns: &[&str]) {
+        self.out.push_str("#TABLE\t");
+        self.out.push_str(name);
+        self.out.push('\n');
+        self.out.push_str("#COLS");
+        for column in columns {
+            self.out.push('\t');
+            self.out.push_str(column);
+        }
+        self.out.push('\n');
+    }
+
+    fn row(&mut self, values: &[String]) {
+        for (i, value) in values.iter().enumerate() {
+            if i > 0 {
+                self.out.push('\t');
+            }
+            self.out.push_str(&cell(value));
+        }
+        self.out.push('\n');
+    }
+}
+
+/// One capture as rows, for a spreadsheet.
+///
+/// Every table is complete rather than topped at fifteen the way the summary
+/// is: a summary is read, and a spreadsheet is sorted and filtered, so cutting
+/// it short would remove the only reason to open it in a spreadsheet at all.
+pub fn export_tables(
+    analysis: &Analysis,
+    limits: CaptureLimits,
+    file_name: &str,
+    redactor: &mut Redactor,
+) -> String {
+    redactor.learn(analysis);
+    let summary = &analysis.summary;
+    let mut t = Tables {
+        out: String::with_capacity(8192),
+    };
+
+    // What the file is, and what it cannot say. First, because a sheet of
+    // numbers with no provenance is how a capture gets quoted out of context.
+    t.table("Capture", &["Fact", "Value"]);
+    t.row(&[
+        "File".into(),
+        if redactor.is_enabled() {
+            "(name withheld)".into()
+        } else {
+            file_name.to_string()
+        },
+    ]);
+    t.row(&["Packets".into(), summary.packets.to_string()]);
+    t.row(&["Bytes on the wire".into(), summary.wire_bytes.to_string()]);
+    t.row(&[
+        "Duration in seconds".into(),
+        format!("{:.3}", summary.duration_seconds()),
+    ]);
+    t.row(&[
+        "Link layer".into(),
+        summary
+            .link_types
+            .first()
+            .map(|l| l.name())
+            .unwrap_or("unknown")
+            .to_string(),
+    ]);
+    t.row(&["Snaplen".into(), limits.snaplen.to_string()]);
+    t.row(&[
+        "Packets dropped by the capture tool".into(),
+        match limits.reported_drops {
+            Some(n) => n.to_string(),
+            // Not the same as zero, and a cell saying 0 would be a claim the
+            // file does not support.
+            None => "not recorded by this file".into(),
+        },
+    ]);
+    t.row(&[
+        "Addresses replaced".into(),
+        if redactor.is_enabled() { "yes" } else { "no" }.into(),
+    ]);
+
+    // Findings. Severity and confidence stay in separate columns so they can
+    // be filtered on separately, which is the whole point of the two axes.
+    let findings = analysis.findings(limits);
+    t.table(
+        "Findings",
+        &[
+            "Severity",
+            "Confidence",
+            "What it is",
+            "What the capture shows",
+            "Involves",
+            "First packet",
+            "Why confidence is not higher",
+        ],
+    );
+    for finding in &findings {
+        let involves = finding
+            .endpoints
+            .iter()
+            .map(|e| redactor.address(e))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let why = finding
+            .limits
+            .iter()
+            .map(|l| redactor.redact_text(l))
+            .collect::<Vec<_>>()
+            .join(" ");
+        t.row(&[
+            finding.severity.label().to_string(),
+            finding.confidence.label().to_string(),
+            redactor.redact_text(&finding.title),
+            redactor.redact_text(&finding.what),
+            involves,
+            (finding.first_packet + 1).to_string(),
+            why,
+        ]);
+    }
+
+    // Conversations, busiest first and all of them.
+    let mut flows: Vec<(FlowKey, _)> = summary.flows.iter().map(|(k, v)| (*k, *v)).collect();
+    flows.sort_by(|a, b| b.1.bytes().cmp(&a.1.bytes()));
+    t.table(
+        "Conversations",
+        &[
+            "From",
+            "From port",
+            "To",
+            "To port",
+            "Protocol",
+            "Packets",
+            "Bytes",
+            "How it ended",
+            "Confidence",
+        ],
+    );
+    for (key, stats) in &flows {
+        let outcome = stats.outcome(key.proto);
+        t.row(&[
+            redactor.address(&key.a.to_string()),
+            key.a_port.to_string(),
+            redactor.address(&key.b.to_string()),
+            key.b_port.to_string(),
+            crate::report::protocol_name(key.proto).to_string(),
+            stats.packets().to_string(),
+            stats.bytes().to_string(),
+            outcome.label().to_string(),
+            outcome.confidence().to_string(),
+        ]);
+    }
+
+    // Addressing. Every row is something ARP stated outright.
+    t.table(
+        "Addressing",
+        &["Address", "Hardware address", "What proves it", "That hardware address"],
+    );
+    let mut bindings: Vec<_> = summary.bindings.iter().collect();
+    bindings.sort_by_key(|((addr, mac), _)| (*addr, *mac));
+    for ((addr, mac), binding) in bindings {
+        let role = summary
+            .macs
+            .get(mac)
+            .map(|p| p.role())
+            .unwrap_or("a device on this network");
+        t.row(&[
+            redactor.address(&addr.to_string()),
+            redactor.address(&format_mac(mac)),
+            binding.evidence.label().to_string(),
+            role.to_string(),
+        ]);
+    }
+
+    t.out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -570,6 +778,54 @@ mod tests {
         assert!(md.contains("host-"), "the labels are there instead");
         // The file name is identifying too.
         assert!(!md.contains("odd.pcap"), "the file name survived: {md}");
+    }
+
+    #[test]
+    fn the_tables_redact_every_column_an_address_can_reach() {
+        let bytes = hostile();
+        let (analysis, limits) = analyse(&bytes);
+        let mut hidden = Redactor::new(PrivacyMode::Redacted);
+        let tables = export_tables(&analysis, limits, "odd.pcap", &mut hidden);
+
+        // The reason this test exists: a spreadsheet is the export most
+        // likely to be mailed onward, and it reaches three different columns
+        // that can carry an address - the finding's own text, its endpoints,
+        // and both ends of every conversation. Each has to go through the
+        // redactor separately, so each is a separate way to leak.
+        assert!(!tables.contains("192.168.1.10"), "an address survived: {tables}");
+        assert!(!tables.contains("odd.pcap"), "the file name survived: {tables}");
+        assert!(tables.contains("host-"), "the labels are there instead");
+        assert!(
+            tables.contains("Addresses replaced\tyes"),
+            "the sheet has to say it was redacted: {tables}"
+        );
+    }
+
+    #[test]
+    fn the_tables_are_rectangular() {
+        let bytes = hostile();
+        let (analysis, limits) = analyse(&bytes);
+        let mut open = Redactor::new(PrivacyMode::Full);
+        let tables = export_tables(&analysis, limits, "odd.pcap", &mut open);
+
+        // Every row has to have exactly as many cells as its table declared,
+        // or a spreadsheet silently shifts values into the wrong columns -
+        // which is worse than failing, because it still looks like data.
+        let mut columns = 0;
+        let mut seen = 0;
+        for line in tables.lines() {
+            if let Some(rest) = line.strip_prefix("#COLS\t") {
+                columns = rest.split('\t').count();
+                seen += 1;
+            } else if !line.starts_with("#TABLE\t") && !line.is_empty() {
+                assert_eq!(
+                    line.split('\t').count(),
+                    columns,
+                    "row has the wrong number of cells: {line}"
+                );
+            }
+        }
+        assert_eq!(seen, 4, "four tables: capture, findings, conversations, addressing");
     }
 
     #[test]

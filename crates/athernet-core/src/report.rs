@@ -344,7 +344,7 @@ pub fn capture_json(
 
 // -------------------------------------------------------------- the explorer
 
-fn protocol_name(proto: u8) -> &'static str {
+pub(crate) fn protocol_name(proto: u8) -> &'static str {
     match proto {
         1 => "icmp",
         6 => "tcp",

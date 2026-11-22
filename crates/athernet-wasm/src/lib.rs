@@ -31,7 +31,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use athernet_core::assistant::PrivacyMode;
-use athernet_core::export::{export, ExportFormat};
+use athernet_core::export::{export, export_tables, ExportFormat};
 use athernet_core::{
     assistant_json, capture_json, decode, packet_detail_json, packets_json, Analysis, CaptureFile,
     CaptureLimits, PacketQuery,
@@ -287,16 +287,29 @@ pub unsafe extern "C" fn athernet_export(
     mode_ptr: *const u8,
     mode_len: usize,
 ) -> *mut u8 {
-    let format = ExportFormat::parse(&borrow_str(format_ptr, format_len));
+    let requested = borrow_str(format_ptr, format_len);
     let mode = PrivacyMode::parse(&borrow_str(mode_ptr, mode_len));
     SESSIONS.with(|s| match s.borrow().get(&handle) {
         Some(session) => {
             let mut redactor = athernet_core::Redactor::new(mode);
+            // "tables" is a different shape of the same capture rather than a
+            // different format of the summary, so it does not belong in
+            // ExportFormat - but it comes down the same call, because what the
+            // caller needs is identical: a handle, a privacy mode, and text
+            // back that has already been through the redactor.
+            if requested == "tables" {
+                return handback(export_tables(
+                    &session.analysis,
+                    session.limits,
+                    &session.name,
+                    &mut redactor,
+                ));
+            }
             handback(export(
                 &session.analysis,
                 session.limits,
                 &session.name,
-                format,
+                ExportFormat::parse(&requested),
                 &mut redactor,
             ))
         }
