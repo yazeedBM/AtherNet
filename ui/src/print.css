@@ -1,14 +1,14 @@
-/* Printing, which is how this app makes a PDF.
+/* Printing the app itself.
  *
- * Not by writing a PDF encoder. The browser already has one, it embeds the
- * fonts, it breaks pages, it handles every script the capture might contain,
- * and it keeps the file on the machine - which a rendering service would not.
- * The whole feature is therefore a stylesheet, and the work is deciding what
- * a printed page should hold rather than how to draw it.
+ * The PDF export does not come through here any more - ui/src/pdf.ts writes
+ * that file directly, so that "Download PDF" downloads something laid out as
+ * a report rather than opening a dialog onto a screenshot of the screen.
  *
- * What prints is the summary, on paper. The screen's chrome - the rail, the
- * filter bar, the tabs, the buttons - is navigation, and navigation on paper
- * is just ink. */
+ * This remains because Ctrl+P remains. Somebody looking at a finding will
+ * press it, and what they get should be the finding rather than forty pages
+ * of dark background with a navigation rail down the side. The chrome - the
+ * rail, the filter bar, the tabs, the buttons - is navigation, and navigation
+ * on paper is just ink. */
 
 @media print {
   /* Paper is white and ink is black, whatever the screen was doing. A dark

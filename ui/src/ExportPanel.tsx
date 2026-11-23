@@ -15,7 +15,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Explorer } from './analyse';
+import { parseSummary } from './blocks';
 import { csv, docx, xlsx, type Table } from './ooxml';
+import { pdf } from './pdf';
 import { parseTables } from './tables';
 import type { Capture, PrivacyMode } from './report';
 
@@ -52,7 +54,7 @@ const FORMATS: FormatSpec[] = [
   {
     id: 'pdf',
     label: 'PDF',
-    hint: 'Opens your browser’s print dialog. Choose “Save as PDF” there.',
+    hint: 'A laid-out report, for attaching to a ticket or sending on.',
     extension: 'pdf',
     shape: 'summary',
     literal: false,
@@ -192,10 +194,7 @@ export function ExportPanel({ capture, file }: { capture: Capture; file: File | 
 
   function download() {
     if (format === 'pdf') {
-      // The browser's own print pipeline. It embeds the fonts, breaks the
-      // pages and never sends a byte anywhere, which no rendering service
-      // could promise. print.css decides what lands on the paper.
-      window.print();
+      save(pdf(parseSummary(text), { file: capture.file, redacted: mode === 'redacted' }), fileName);
       return;
     }
     if (format === 'docx') {
@@ -313,7 +312,7 @@ export function ExportPanel({ capture, file }: { capture: Capture; file: File | 
           {copied ? 'Copied' : shape === 'tables' ? 'Copy as CSV' : 'Copy'}
         </button>
         <button type="button" className="open-button" onClick={download}>
-          {format === 'pdf' ? 'Print to PDF' : `Download ${chosen.extension.toUpperCase()}`}
+          Download {chosen.extension.toUpperCase()}
         </button>
         <span className="muted export-size">
           {shape === 'tables' && shown
@@ -332,7 +331,7 @@ export function ExportPanel({ capture, file }: { capture: Capture; file: File | 
       {!chosen.literal && (
         <p className="export-caveat muted">
           {format === 'pdf'
-            ? 'The preview below is the source. The printed page is this capture laid out for paper, with the screen’s controls left off. Nothing is sent anywhere — your browser makes the PDF.'
+            ? 'The preview below is the source. The PDF is this capture set as a report — headings, findings and tables laid out for the page. It is written here, on this machine, like every other export.'
             : format === 'docx'
               ? 'The preview below is the source. The .docx holds the same words as headings and paragraphs, without the markdown punctuation.'
               : format === 'xlsx'

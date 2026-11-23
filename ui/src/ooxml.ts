@@ -12,6 +12,8 @@
 // wrong. If these ever need to be small, `CompressionStream('deflate-raw')`
 // is the way, and only `method` and the two sizes change.
 
+import { parseSummary } from './blocks';
+
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let i = 0; i < 256; i += 1) {
@@ -256,42 +258,37 @@ export function xlsx(tables: Table[]): Blob {
 type Para = { text: string; style: 'title' | 'heading' | 'body' | 'mono' };
 
 /**
- * Turn the summary's markdown into paragraphs.
+ * The summary as Word paragraphs.
  *
- * Deliberately shallow: headings, list items and everything else. The summary
- * is the only thing ever passed here and it is written by this project, so a
- * full markdown parser would be code with no second caller and a lot of
- * surface to get wrong.
+ * The parsing lives in ./blocks, shared with the PDF writer, so the two
+ * cannot come to different conclusions about the same document. This only
+ * decides how each block looks in Word.
  */
 export function paragraphs(markdown: string): Para[] {
   const out: Para[] = [];
-  for (const raw of markdown.split('\n')) {
-    const line = raw.trimEnd();
-    if (line === '') continue;
-    if (line.startsWith('# ')) {
-      out.push({ text: line.slice(2), style: 'title' });
-    } else if (line.startsWith('## ')) {
-      out.push({ text: line.slice(3), style: 'heading' });
-    } else if (line.startsWith('### ')) {
-      out.push({ text: line.slice(4), style: 'heading' });
-    } else if (line.startsWith('|')) {
-      // A markdown table in a Word document would be a wall of pipes. The
-      // rule line is dropped and the rest become plain rows; anybody who
-      // wants the table as a table has the spreadsheet.
-      if (/^\|[\s:|-]+\|$/.test(line)) continue;
-      const cells = line.split('|').slice(1, -1).map((c) => c.trim());
-      out.push({ text: cells.join('  ·  '), style: 'mono' });
-    } else if (line.startsWith('> ')) {
-      out.push({ text: line.slice(2), style: 'body' });
-    } else if (line.startsWith('- ')) {
-      out.push({ text: `•  ${line.slice(2)}`, style: 'body' });
-    } else {
-      out.push({ text: line, style: 'body' });
+  for (const block of parseSummary(markdown)) {
+    switch (block.kind) {
+      case 'title':
+        out.push({ text: block.text, style: 'title' });
+        break;
+      case 'heading':
+        out.push({ text: block.text, style: 'heading' });
+        break;
+      case 'bullet':
+        out.push({ text: `•  ${block.text}`, style: 'body' });
+        break;
+      case 'table':
+        // A table in a Word document would want a real w:tbl. Until it has
+        // one, the rows go in as fixed-width lines rather than as a wall of
+        // pipes, and anybody who wants to sort them has the spreadsheet.
+        out.push({ text: block.header.join('  ·  '), style: 'mono' });
+        for (const row of block.rows) {
+          out.push({ text: row.join('  ·  '), style: 'mono' });
+        }
+        break;
+      default:
+        out.push({ text: block.text, style: 'body' });
     }
-    // Markdown emphasis and code fences mean nothing in a Word paragraph, so
-    // they are stripped from the text rather than shown as punctuation.
-    const last = out[out.length - 1];
-    if (last) last.text = last.text.replace(/\*\*/g, '').replace(/`+/g, '');
   }
   return out;
 }
