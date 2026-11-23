@@ -24,8 +24,53 @@
 
 use crate::assistant::Redactor;
 use crate::detect::{Analysis, CaptureLimits};
-use crate::flow::FlowKey;
+use crate::filter::{Filter, Subject};
+use crate::flow::{Addr, FlowKey};
 use crate::summary::Contention;
+
+/// What the reader is looking at, when a filter was in force.
+///
+/// An export is read by somebody who was not at the screen, so a narrowed
+/// report that does not say it was narrowed is the most dangerous thing this
+/// file can produce - worse than no export, because it looks complete. Every
+/// export that was filtered carries this line, in the same place the
+/// redaction note goes and for the same reason.
+pub struct Scope<'a> {
+    pub filter: Option<&'a Filter>,
+    /// The filter as the person typed or built it, for the note.
+    pub description: &'a str,
+}
+
+impl Scope<'_> {
+    pub fn none() -> Scope<'static> {
+        Scope {
+            filter: None,
+            description: "",
+        }
+    }
+
+    fn active(&self) -> bool {
+        self.filter.is_some_and(|f| !f.is_empty())
+    }
+
+    fn keeps(&self, subject: &Subject) -> bool {
+        match self.filter {
+            Some(filter) => filter.judge(subject).keeps(),
+            None => true,
+        }
+    }
+
+    fn note(&self) -> String {
+        let what = if self.description.is_empty() {
+            "a filter".to_string()
+        } else {
+            format!("the filter {}", self.description)
+        };
+        format!(
+            "This is not the whole capture: {what} was in force, so anything it ruled out is missing from every list below. Rows the filter could not judge - it asks about single packets, and a conversation is many - were kept rather than dropped."
+        )
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportFormat {
@@ -146,10 +191,15 @@ pub fn export(
     file_name: &str,
     format: ExportFormat,
     redactor: &mut Redactor,
+    scope: &Scope,
 ) -> String {
     redactor.learn(analysis);
     let summary = &analysis.summary;
-    let findings = analysis.findings(limits);
+    let findings: Vec<_> = analysis
+        .findings(limits)
+        .into_iter()
+        .filter(|f| scope.keeps(&Subject::from_endpoints(&f.endpoints)))
+        .collect();
     let mut w = Writer {
         out: String::with_capacity(4096),
         markdown: format == ExportFormat::Markdown,
@@ -178,6 +228,19 @@ pub fn export(
         limits.snaplen
     ));
     w.blank();
+
+    // The scope note goes first. Whether this is the whole capture is a
+    // bigger question than whether the addresses are real, and somebody who
+    // reads only the top of a ticket should meet it before anything else.
+    if scope.active() {
+        let note = scope.note();
+        if w.markdown {
+            w.line(&format!("> **{note}**"));
+        } else {
+            w.line(&format!("NOTE: {note}"));
+        }
+        w.blank();
+    }
 
     if redactor.is_enabled() {
         let note = "Addresses in this summary have been replaced. Names like host-1 and device-2 are labels, not anything somebody chose, and the same label always means the same device. The mapping stays on the machine the capture was read on.";
@@ -300,7 +363,12 @@ pub fn export(
     }
 
     // Conversations, busiest first, as a table in markdown.
-    let mut flows: Vec<(FlowKey, _)> = summary.flows.iter().map(|(k, v)| (*k, *v)).collect();
+    let mut flows: Vec<(FlowKey, _)> = summary
+        .flows
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .filter(|(key, _)| scope.keeps(&flow_subject(key)))
+        .collect();
     flows.sort_by(|a, b| b.1.bytes().cmp(&a.1.bytes()));
     if !flows.is_empty() {
         w.heading(2, "Conversations");
@@ -356,7 +424,11 @@ pub fn export(
             w.line("| Address | Hardware address | What proves it | That hardware address |");
             w.line("| --- | --- | --- | --- |");
         }
-        let mut bindings: Vec<_> = summary.bindings.iter().collect();
+        let mut bindings: Vec<_> = summary
+            .bindings
+            .iter()
+            .filter(|((addr, mac), _)| scope.keeps(&binding_subject(addr, mac)))
+            .collect();
         bindings.sort_by_key(|((addr, mac), _)| (*addr, *mac));
         for ((addr, mac), binding) in bindings {
             let address = redactor.address(&addr.to_string());
@@ -399,6 +471,29 @@ pub fn export(
     }
 
     w.out
+}
+
+/// A conversation, as the filter sees it: both ends, both ports, its protocol.
+fn flow_subject(key: &FlowKey) -> Subject {
+    Subject {
+        src: vec![key.a.to_string()],
+        dst: vec![key.b.to_string()],
+        src_ports: vec![key.a_port],
+        dst_ports: vec![key.b_port],
+        protocol: Some(crate::report::protocol_name(key.proto).to_string()),
+    }
+}
+
+/// A binding is an address and the hardware address claiming it. Both are
+/// addresses as far as a filter is concerned, so a filter naming either keeps
+/// the row.
+fn binding_subject(addr: &Addr, mac: &[u8; 6]) -> Subject {
+    let both = vec![addr.to_string(), format_mac(mac)];
+    Subject {
+        src: both.clone(),
+        dst: both,
+        ..Subject::default()
+    }
 }
 
 fn format_mac(mac: &[u8; 6]) -> String {
@@ -473,6 +568,7 @@ pub fn export_tables(
     limits: CaptureLimits,
     file_name: &str,
     redactor: &mut Redactor,
+    scope: &Scope,
 ) -> String {
     redactor.learn(analysis);
     let summary = &analysis.summary;
@@ -520,10 +616,32 @@ pub fn export_tables(
         "Addresses replaced".into(),
         if redactor.is_enabled() { "yes" } else { "no" }.into(),
     ]);
+    // A spreadsheet is sorted and pivoted and quoted from, usually by
+    // somebody who never saw the screen it came off. If these rows are only
+    // part of the capture, the sheet has to say so itself.
+    t.row(&[
+        "Filtered".into(),
+        if scope.active() {
+            if scope.description.is_empty() {
+                "yes".to_string()
+            } else {
+                format!("yes - {}", scope.description)
+            }
+        } else {
+            "no - every row is in here".to_string()
+        },
+    ]);
+    if scope.active() {
+        t.row(&["What that means".into(), scope.note()]);
+    }
 
     // Findings. Severity and confidence stay in separate columns so they can
     // be filtered on separately, which is the whole point of the two axes.
-    let findings = analysis.findings(limits);
+    let findings: Vec<_> = analysis
+        .findings(limits)
+        .into_iter()
+        .filter(|f| scope.keeps(&Subject::from_endpoints(&f.endpoints)))
+        .collect();
     t.table(
         "Findings",
         &[
@@ -561,7 +679,12 @@ pub fn export_tables(
     }
 
     // Conversations, busiest first and all of them.
-    let mut flows: Vec<(FlowKey, _)> = summary.flows.iter().map(|(k, v)| (*k, *v)).collect();
+    let mut flows: Vec<(FlowKey, _)> = summary
+        .flows
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .filter(|(key, _)| scope.keeps(&flow_subject(key)))
+        .collect();
     flows.sort_by(|a, b| b.1.bytes().cmp(&a.1.bytes()));
     t.table(
         "Conversations",
@@ -597,7 +720,11 @@ pub fn export_tables(
         "Addressing",
         &["Address", "Hardware address", "What proves it", "That hardware address"],
     );
-    let mut bindings: Vec<_> = summary.bindings.iter().collect();
+    let mut bindings: Vec<_> = summary
+        .bindings
+        .iter()
+        .filter(|((addr, mac), _)| scope.keeps(&binding_subject(addr, mac)))
+        .collect();
     bindings.sort_by_key(|((addr, mac), _)| (*addr, *mac));
     for ((addr, mac), binding) in bindings {
         let role = summary
@@ -728,7 +855,7 @@ mod tests {
         let bytes = hostile();
         let (analysis, limits) = analyse(&bytes);
         let mut open = Redactor::new(PrivacyMode::Full);
-        let md = export(&analysis, limits, "odd.pcap", ExportFormat::Markdown, &mut open);
+        let md = export(&analysis, limits, "odd.pcap", ExportFormat::Markdown, &mut open, &Scope::none());
 
         // The name is in the export - it is the finding, and hiding it
         // would be its own kind of dishonesty.
@@ -752,7 +879,7 @@ mod tests {
         let bytes = hostile();
         let (analysis, limits) = analyse(&bytes);
         let mut open = Redactor::new(PrivacyMode::Full);
-        let md = export(&analysis, limits, "odd.pcap", ExportFormat::Markdown, &mut open);
+        let md = export(&analysis, limits, "odd.pcap", ExportFormat::Markdown, &mut open, &Scope::none());
 
         assert!(md.contains("What this capture cannot settle"));
         assert!(md.contains("cannot show whether the capture kept up"));
@@ -768,7 +895,7 @@ mod tests {
         let bytes = hostile();
         let (analysis, limits) = analyse(&bytes);
         let mut hidden = Redactor::new(PrivacyMode::Redacted);
-        let md = export(&analysis, limits, "odd.pcap", ExportFormat::Markdown, &mut hidden);
+        let md = export(&analysis, limits, "odd.pcap", ExportFormat::Markdown, &mut hidden, &Scope::none());
 
         assert!(
             md.contains("have been replaced"),
@@ -781,11 +908,92 @@ mod tests {
     }
 
     #[test]
+    fn a_filtered_export_says_it_is_not_the_whole_capture() {
+        use crate::filter::Filter;
+        use crate::packets::PacketIndex;
+
+        let bytes = hostile();
+        let (analysis, limits) = analyse(&bytes);
+
+        // An address that is not in this capture, so the filter rules out
+        // everything and the export is as narrow as it can get.
+        let index = PacketIndex::default();
+        let filter = Filter::parse("F\tall\nG\tall\nC\tany_addr\tis\t10.99.99.99\t0", &index);
+        let scope = Scope {
+            filter: Some(&filter),
+            description: "ip.addr == 10.99.99.99",
+        };
+
+        let mut open = Redactor::new(PrivacyMode::Full);
+        let md = export(&analysis, limits, "odd.pcap", ExportFormat::Markdown, &mut open, &scope);
+
+        // This is the whole point. A report that is part of a capture and
+        // does not say so is read as the whole thing, and somebody closes a
+        // ticket on it.
+        assert!(
+            md.contains("not the whole capture"),
+            "a filtered export must say so: {md}"
+        );
+        assert!(
+            md.contains("ip.addr == 10.99.99.99"),
+            "and it must say which filter: {md}"
+        );
+
+        let mut open = Redactor::new(PrivacyMode::Full);
+        let whole = export(&analysis, limits, "odd.pcap", ExportFormat::Markdown, &mut open, &Scope::none());
+        assert!(
+            !whole.contains("not the whole capture"),
+            "an unfiltered export must not say it was filtered: {whole}"
+        );
+
+        // And the tables carry it in a cell of their own, because a sheet is
+        // read far from the screen it came off.
+        let mut open = Redactor::new(PrivacyMode::Full);
+        let tables = export_tables(&analysis, limits, "odd.pcap", &mut open, &scope);
+        assert!(
+            tables.contains("Filtered\tyes - ip.addr == 10.99.99.99"),
+            "the sheet has to say it is filtered: {tables}"
+        );
+
+        let mut open = Redactor::new(PrivacyMode::Full);
+        let all = export_tables(&analysis, limits, "odd.pcap", &mut open, &Scope::none());
+        assert!(
+            all.contains("Filtered\tno - every row is in here"),
+            "and has to say when it is not: {all}"
+        );
+    }
+
+    #[test]
+    fn a_filter_narrows_what_the_export_holds() {
+        use crate::filter::{Filter, Subject, Truth};
+        use crate::packets::PacketIndex;
+
+        let index = PacketIndex::default();
+        let filter = Filter::parse("F\tall\nG\tall\nC\tany_addr\tis\t192.168.1.10\t0", &index);
+
+        let involved = Subject::from_endpoints(&["192.168.1.10:443".to_string()]);
+        let other = Subject::from_endpoints(&["10.0.0.5:53".to_string()]);
+        assert_eq!(filter.judge(&involved), Truth::Yes);
+        assert_eq!(filter.judge(&other), Truth::No);
+
+        // A per-packet question has no answer about a conversation, and the
+        // answer must be Unknown rather than No - otherwise filtering on a
+        // length would silently empty every export.
+        let length = Filter::parse("F\tall\nG\tall\nC\tlength\tgt\t1000\t0", &index);
+        assert_eq!(length.judge(&involved), Truth::Unknown);
+        assert!(length.judge(&involved).keeps());
+
+        // An empty filter never narrows anything.
+        let nothing = Filter::parse("", &index);
+        assert_eq!(nothing.judge(&other), Truth::Yes);
+    }
+
+    #[test]
     fn the_tables_redact_every_column_an_address_can_reach() {
         let bytes = hostile();
         let (analysis, limits) = analyse(&bytes);
         let mut hidden = Redactor::new(PrivacyMode::Redacted);
-        let tables = export_tables(&analysis, limits, "odd.pcap", &mut hidden);
+        let tables = export_tables(&analysis, limits, "odd.pcap", &mut hidden, &Scope::none());
 
         // The reason this test exists: a spreadsheet is the export most
         // likely to be mailed onward, and it reaches three different columns
@@ -806,7 +1014,7 @@ mod tests {
         let bytes = hostile();
         let (analysis, limits) = analyse(&bytes);
         let mut open = Redactor::new(PrivacyMode::Full);
-        let tables = export_tables(&analysis, limits, "odd.pcap", &mut open);
+        let tables = export_tables(&analysis, limits, "odd.pcap", &mut open, &Scope::none());
 
         // Every row has to have exactly as many cells as its table declared,
         // or a spreadsheet silently shifts values into the wrong columns -
@@ -833,7 +1041,7 @@ mod tests {
         let bytes = hostile();
         let (analysis, limits) = analyse(&bytes);
         let mut open = Redactor::new(PrivacyMode::Full);
-        let text = export(&analysis, limits, "odd.pcap", ExportFormat::Text, &mut open);
+        let text = export(&analysis, limits, "odd.pcap", ExportFormat::Text, &mut open, &Scope::none());
         assert!(!text.contains("##"), "got {text}");
         assert!(!text.contains("**"), "got {text}");
         assert!(text.contains("WHAT THIS CAPTURE CANNOT SETTLE"), "got {text}");

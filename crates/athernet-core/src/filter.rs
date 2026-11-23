@@ -315,6 +315,200 @@ impl Condition {
     }
 }
 
+// ------------------------------------------- the same filter, bigger things
+//
+// A filter is written against packets, and the parts of this app that are not
+// packets still have to honour it: a findings list, a map of conversations,
+// an export. Those are not packets, so some questions have no answer about
+// them - a conversation is many packets and has no single length or TCP flag.
+//
+// Hence three values rather than two. A subject the filter rules out is
+// dropped; one it cannot decide is kept, and the view says it could not
+// decide. Folding Unknown into No would quietly empty a map or an export the
+// moment somebody filtered on a per-packet field, and a report that silently
+// loses rows is the worst thing this project could ship.
+//
+// ui/src/display-filter.ts does the same job for the live screen, which needs
+// an answer without calling into the core. The two must agree; this one is
+// authoritative, because it is the one the exports go through.
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Truth {
+    Yes,
+    No,
+    Unknown,
+}
+
+impl Truth {
+    fn and(self, other: Truth) -> Truth {
+        match (self, other) {
+            (Truth::No, _) | (_, Truth::No) => Truth::No,
+            (Truth::Unknown, _) | (_, Truth::Unknown) => Truth::Unknown,
+            _ => Truth::Yes,
+        }
+    }
+
+    fn or(self, other: Truth) -> Truth {
+        match (self, other) {
+            (Truth::Yes, _) | (_, Truth::Yes) => Truth::Yes,
+            (Truth::Unknown, _) | (_, Truth::Unknown) => Truth::Unknown,
+            _ => Truth::No,
+        }
+    }
+
+    /// What a view should do with it: keep anything not ruled out.
+    pub fn keeps(self) -> bool {
+        self != Truth::No
+    }
+}
+
+/// What a non-packet thing can say about itself.
+///
+/// A conversation knows both its ends and both its ports. A finding knows the
+/// addresses it involves but has no direction, so it puts them on both sides:
+/// `ip.src == x` then matches a finding about x, which is what somebody
+/// filtering by an address means.
+#[derive(Default)]
+pub struct Subject {
+    pub src: Vec<String>,
+    pub dst: Vec<String>,
+    pub src_ports: Vec<u16>,
+    pub dst_ports: Vec<u16>,
+    pub protocol: Option<String>,
+}
+
+impl Subject {
+    pub fn from_endpoints(endpoints: &[String]) -> Subject {
+        let mut subject = Subject::default();
+        for endpoint in endpoints {
+            // "10.0.0.1:443", a bare address, or a hardware address - which
+            // is full of colons and must not be split on the last one.
+            match endpoint.rsplit_once(':') {
+                Some((head, tail)) if tail.chars().all(|c| c.is_ascii_digit()) && !tail.is_empty() => {
+                    subject.src.push(head.to_string());
+                    if let Ok(port) = tail.parse() {
+                        subject.src_ports.push(port);
+                    }
+                }
+                _ => subject.src.push(endpoint.clone()),
+            }
+        }
+        subject.dst = subject.src.clone();
+        subject.dst_ports = subject.src_ports.clone();
+        subject
+    }
+}
+
+impl Filter {
+    /// Does this conversation, finding or binding pass?
+    pub fn judge(&self, subject: &Subject) -> Truth {
+        if self.is_empty() {
+            return Truth::Yes;
+        }
+        let mut overall = if self.match_all { Truth::Yes } else { Truth::No };
+        for group in &self.groups {
+            let mut inner = if group.match_all { Truth::Yes } else { Truth::No };
+            for condition in &group.conditions {
+                let one = condition.judge(subject);
+                inner = if group.match_all { inner.and(one) } else { inner.or(one) };
+            }
+            overall = if self.match_all { overall.and(inner) } else { overall.or(inner) };
+        }
+        overall
+    }
+}
+
+impl Condition {
+    fn judge(&self, subject: &Subject) -> Truth {
+        match self.field {
+            Field::AnyAddress => {
+                let mut all: Vec<&String> = subject.src.iter().collect();
+                all.extend(subject.dst.iter());
+                self.address_truth(&all)
+            }
+            Field::Source => self.address_truth(&subject.src.iter().collect::<Vec<_>>()),
+            Field::Destination => self.address_truth(&subject.dst.iter().collect::<Vec<_>>()),
+            Field::AnyPort => {
+                let mut all = subject.src_ports.clone();
+                all.extend(subject.dst_ports.iter());
+                self.port_truth(&all)
+            }
+            Field::SourcePort => self.port_truth(&subject.src_ports),
+            Field::DestinationPort => self.port_truth(&subject.dst_ports),
+            Field::Protocol => match &subject.protocol {
+                Some(protocol) => {
+                    let same = protocol.to_lowercase() == self.value.trim();
+                    yes_no(if self.negate { !same } else { same })
+                }
+                None => Truth::Unknown,
+            },
+            // Length, seconds, the summary line, a TCP flag, truncation: all
+            // properties of one packet. A conversation has many and a finding
+            // has none, so there is no answer to give.
+            _ => Truth::Unknown,
+        }
+    }
+
+    fn address_truth(&self, addresses: &[&String]) -> Truth {
+        if addresses.is_empty() {
+            return Truth::Unknown;
+        }
+        let needle = self.value.trim();
+        let subnet = if self.op == Op::InSubnet {
+            parse_cidr(needle)
+        } else {
+            None
+        };
+        let mut unknown = false;
+        for address in addresses {
+            let text = address.to_lowercase();
+            let hit = match self.op {
+                Op::InSubnet => match (subnet, parse_address(&text)) {
+                    (Some((base, bits)), Some(addr)) => in_subnet(addr, base, bits),
+                    // An address the core cannot parse cannot be placed in or
+                    // out of a subnet, and guessing either way would be a
+                    // claim the capture does not support.
+                    _ => {
+                        unknown = true;
+                        continue;
+                    }
+                },
+                Op::Contains => text.contains(needle),
+                _ => text == needle || parse_address(needle).is_some_and(|a| Some(a) == parse_address(&text)),
+            };
+            if hit {
+                return yes_no(!self.negate);
+            }
+        }
+        if unknown {
+            return Truth::Unknown;
+        }
+        // Negated and nothing matched means every end is something else,
+        // which is what "not this address" is asked to mean.
+        yes_no(self.negate)
+    }
+
+    fn port_truth(&self, ports: &[u16]) -> Truth {
+        // Zero is how the core says "no port here" - ARP and ICMP have none.
+        // That is not a port that fails the test, it is the absence of one,
+        // so there is nothing to answer.
+        let real: Vec<u16> = ports.iter().copied().filter(|p| *p != 0).collect();
+        if real.is_empty() {
+            return Truth::Unknown;
+        }
+        let any = real.iter().any(|p| self.port(*p));
+        yes_no(if self.negate { !any } else { any })
+    }
+}
+
+fn yes_no(value: bool) -> Truth {
+    if value {
+        Truth::Yes
+    } else {
+        Truth::No
+    }
+}
+
 /// Resolve an address condition against every address this capture holds.
 fn compile_addresses(index: &PacketIndex, op: Op, value: &str) -> Vec<bool> {
     let needle = value.trim().to_lowercase();

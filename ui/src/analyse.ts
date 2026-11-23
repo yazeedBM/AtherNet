@@ -226,11 +226,31 @@ export class Explorer {
     return JSON.parse(reply.json ?? '') as AssistantReply;
   }
 
-  /** The capture written out for somebody who will read it elsewhere. */
-  async exportSummary(format: string, mode: string): Promise<string | { error: string }> {
+  /**
+   * The capture written out for somebody who will read it elsewhere.
+   *
+   * `filter` is the capture-wide filter in the core's wire format, and `said`
+   * is how to describe it in the note the export carries. Both go to the core
+   * rather than being applied here: the export has to be narrowed before it
+   * is redacted, because after redaction the addresses are labels and no
+   * filter would match them.
+   */
+  async exportSummary(
+    format: string,
+    mode: string,
+    filter = '',
+    said = '',
+  ): Promise<string | { error: string }> {
     const failure = await this.ensure();
     if (failure) return { error: failure };
-    const reply = await this.channel.send({ type: 'export', handle: this.handle!, format, mode });
+    const reply = await this.channel.send({
+      type: 'export',
+      handle: this.handle!,
+      format,
+      mode,
+      filter,
+      said,
+    });
     if (!reply.ok) return { error: reply.message };
     return reply.json ?? '';
   }

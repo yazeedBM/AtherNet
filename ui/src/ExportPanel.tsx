@@ -16,6 +16,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Explorer } from './analyse';
 import { parseSummary } from './blocks';
+import { encode } from './filter';
+import { toFilter, type ParsedFilter } from './display-filter';
 import { csv, docx, xlsx, type Table } from './ooxml';
 import { pdf } from './pdf';
 import { parseTables } from './tables';
@@ -99,7 +101,16 @@ function save(blob: Blob, name: string) {
   URL.revokeObjectURL(url);
 }
 
-export function ExportPanel({ capture, file }: { capture: Capture; file: File | undefined }) {
+export function ExportPanel({
+  capture,
+  file,
+  parsed,
+}: {
+  capture: Capture;
+  file: File | undefined;
+  /** The capture-wide filter from the bar, or null when nothing is filtering. */
+  parsed: ParsedFilter | null;
+}) {
   const [shape, setShape] = useState<Shape>('summary');
   const [format, setFormat] = useState<Format>('markdown');
   const [mode, setMode] = useState<PrivacyMode>('redacted');
@@ -109,6 +120,12 @@ export function ExportPanel({ capture, file }: { capture: Capture; file: File | 
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const session = useRef<Explorer | null>(null);
+
+  // The filter as the core reads it, and as a person would say it. Both are
+  // sent with every export: the core narrows the report before it redacts it,
+  // and writes the note that says it did.
+  const wire = parsed ? encode(toFilter(parsed)) : '';
+  const said = parsed ? parsed.source : '';
 
   useEffect(() => {
     if (!file) return;
@@ -129,7 +146,7 @@ export function ExportPanel({ capture, file }: { capture: Capture; file: File | 
     const open = session.current;
     if (!open) return;
     setCopied(false);
-    void open.exportSummary(summaryFormat, mode).then((result) => {
+    void open.exportSummary(summaryFormat, mode, wire, said).then((result) => {
       if (cancelled) return;
       if (typeof result === 'string') {
         setText(result);
@@ -141,14 +158,14 @@ export function ExportPanel({ capture, file }: { capture: Capture; file: File | 
     return () => {
       cancelled = true;
     };
-  }, [summaryFormat, mode, file]);
+  }, [summaryFormat, mode, file, wire, said]);
 
   // The tables, redacted in the core by the same redactor as the summary.
   useEffect(() => {
     let cancelled = false;
     const open = session.current;
     if (!open || shape !== 'tables') return;
-    void open.exportSummary('tables', mode).then((result) => {
+    void open.exportSummary('tables', mode, wire, said).then((result) => {
       if (cancelled) return;
       if (typeof result === 'string') {
         const parsed = parseTables(result);
@@ -162,7 +179,7 @@ export function ExportPanel({ capture, file }: { capture: Capture; file: File | 
     return () => {
       cancelled = true;
     };
-  }, [shape, mode, file]);
+  }, [shape, mode, file, wire, said]);
 
   if (!file) {
     return (
@@ -284,6 +301,16 @@ export function ExportPanel({ capture, file }: { capture: Capture; file: File | 
           : 'The capture’s real addresses and names go into the export. A ticket is usually read by more people than you expect, and it usually outlives the problem.'}
       </p>
 
+      {/* The core writes this into the file as well. It is repeated on
+          screen because somebody who filtered three screens ago will not
+          remember, and an export they believe is whole is the one mistake
+          this panel can make that nobody catches later. */}
+      {parsed && (
+        <p className="export-scope">
+          This export covers only what matches <code>{parsed.source}</code>. The file says so too.
+        </p>
+      )}
+
       {error && <p className="problems">{error}</p>}
 
       {/* Which sheet the preview and a CSV download are showing. A
@@ -366,8 +393,13 @@ export function ExportPanel({ capture, file }: { capture: Capture; file: File | 
             </p>
           )}
           {shown.rows.length === 0 && (
+            // Two different nothings, and they call for opposite next moves:
+            // an empty table is a fact about the capture, while an empty
+            // filtered table is a fact about the question just asked.
             <p className="muted export-more">
-              Nothing in this table. That is an answer about the capture, not a failure to look.
+              {parsed
+                ? `Nothing in this table matches ${parsed.source}. The capture may still hold rows here — clear the filter to see them.`
+                : 'Nothing in this table. That is an answer about the capture, not a failure to look.'}
             </p>
           )}
         </div>

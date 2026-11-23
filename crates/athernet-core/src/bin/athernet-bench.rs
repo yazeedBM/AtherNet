@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use athernet_core::assistant::{
     answer, check_citations, evidence_pack, CitationKind, PrivacyMode, Redactor,
 };
-use athernet_core::export::{code_span, export, ExportFormat};
+use athernet_core::export::{code_span, export, ExportFormat, Scope};
 use athernet_core::{capture_json, decode, Analysis, CaptureFile, CaptureLimits, Finding};
 
 /// The gate from the design proposal, in packets per minute per core.
@@ -269,7 +269,7 @@ fn assistant_gate(files: &[PathBuf]) -> ExitCode {
         // a code fence, and this checks each one by name rather than
         // trusting that the fencing was applied.
         let mut open = Redactor::new(PrivacyMode::Full);
-        let md = export(&analysis, limits, &name, ExportFormat::Markdown, &mut open);
+        let md = export(&analysis, limits, &name, ExportFormat::Markdown, &mut open, &Scope::none());
         for finding in analysis.findings(limits) {
             if !md.contains(&code_span(&finding.title)) {
                 problems.push(format!(
@@ -294,6 +294,7 @@ fn assistant_gate(files: &[PathBuf]) -> ExitCode {
             &name,
             ExportFormat::Markdown,
             &mut hidden_export,
+            &Scope::none(),
         );
         if let Some(found) = first_address(&redacted_md) {
             problems.push(format!("an address survived into a redacted export: {found}"));

@@ -31,7 +31,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use athernet_core::assistant::PrivacyMode;
-use athernet_core::export::{export, export_tables, ExportFormat};
+use athernet_core::export::{export, export_tables, ExportFormat, Scope};
+use athernet_core::filter::Filter;
 use athernet_core::{
     assistant_json, capture_json, decode, packet_detail_json, packets_json, Analysis, CaptureFile,
     CaptureLimits, PacketQuery,
@@ -286,12 +287,25 @@ pub unsafe extern "C" fn athernet_export(
     format_len: usize,
     mode_ptr: *const u8,
     mode_len: usize,
+    filter_ptr: *const u8,
+    filter_len: usize,
+    said_ptr: *const u8,
+    said_len: usize,
 ) -> *mut u8 {
     let requested = borrow_str(format_ptr, format_len);
     let mode = PrivacyMode::parse(&borrow_str(mode_ptr, mode_len));
+    let wire = borrow_str(filter_ptr, filter_len);
+    // How the person would describe the filter, for the note the export
+    // carries. It is their words, not a rendering of the wire format.
+    let said = borrow_str(said_ptr, said_len);
     SESSIONS.with(|s| match s.borrow().get(&handle) {
         Some(session) => {
             let mut redactor = athernet_core::Redactor::new(mode);
+            let filter = Filter::parse(&wire, &session.analysis.packets);
+            let scope = Scope {
+                filter: if filter.is_empty() { None } else { Some(&filter) },
+                description: &said,
+            };
             // "tables" is a different shape of the same capture rather than a
             // different format of the summary, so it does not belong in
             // ExportFormat - but it comes down the same call, because what the
@@ -303,6 +317,7 @@ pub unsafe extern "C" fn athernet_export(
                     session.limits,
                     &session.name,
                     &mut redactor,
+                    &scope,
                 ));
             }
             handback(export(
@@ -311,6 +326,7 @@ pub unsafe extern "C" fn athernet_export(
                 &session.name,
                 ExportFormat::parse(&requested),
                 &mut redactor,
+                &scope,
             ))
         }
         None => handback(missing(handle)),

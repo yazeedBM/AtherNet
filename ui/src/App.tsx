@@ -492,7 +492,7 @@ export function App() {
               ) : query.kind === 'text' ? (
                 <>Searching the findings for these words. For a packet filter, try <code>ip.addr == 10.0.0.1</code>.</>
               ) : (
-                <>Filtering packets, findings and the map where {describeFilter(toFilter(query.parsed))}</>
+                <>Filtering packets, findings, the map and exports where {describeFilter(toFilter(query.parsed))}</>
               )}
             </p>
           )}
@@ -675,7 +675,7 @@ export function App() {
 
           {single && view === 'export' && (
             <section className="issues">
-              <ExportPanel capture={single} file={files.get(single.id)} />
+              <ExportPanel capture={single} file={files.get(single.id)} parsed={parsed} />
             </section>
           )}
 

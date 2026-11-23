@@ -419,6 +419,23 @@
   margin: 0 0 var(--s-4);
 }
 
+/* The export is narrower than the capture. Said in the accent rather than
+ * in a warning colour: a filtered export is a legitimate thing to want, not
+ * a mistake - it just must not be mistaken for the whole file. */
+.export-scope {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--ink);
+  border-left: 2px solid var(--accent);
+  padding: var(--s-2) 0 var(--s-2) var(--s-4);
+  margin: 0 0 var(--s-4);
+}
+
+.export-scope code {
+  font-family: var(--mono);
+  color: var(--accent);
+}
+
 .export-table-wrap {
   max-height: 52vh;
   overflow: auto;

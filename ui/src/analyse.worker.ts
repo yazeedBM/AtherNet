@@ -29,7 +29,17 @@ export type WorkerRequest =
     }
   | { id: number; type: 'packet'; handle: number; index: number }
   | { id: number; type: 'ask'; handle: number; question: string; mode: string }
-  | { id: number; type: 'export'; handle: number; format: string; mode: string }
+  | {
+      id: number;
+      type: 'export';
+      handle: number;
+      format: string;
+      mode: string;
+      /** The capture-wide filter in the core's wire format, or ''. */
+      filter: string;
+      /** How to describe that filter to whoever reads the export. */
+      said: string;
+    }
   | { id: number; type: 'close'; handle: number };
 
 export type WorkerResponse =
@@ -60,6 +70,10 @@ interface CoreExports {
     formatLen: number,
     modePtr: number,
     modeLen: number,
+    filterPtr: number,
+    filterLen: number,
+    saidPtr: number,
+    saidLen: number,
   ) => number;
   athernet_ask: (
     handle: number,
@@ -179,9 +193,16 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'export': {
         const [fPtr, fLen] = writeString(core, request.format);
         const [mPtr, mLen] = writeString(core, request.mode);
-        const json = readResult(core, core.athernet_export(request.handle, fPtr, fLen, mPtr, mLen));
+        const [qPtr, qLen] = writeString(core, request.filter ?? '');
+        const [sPtr, sLen] = writeString(core, request.said ?? '');
+        const json = readResult(
+          core,
+          core.athernet_export(request.handle, fPtr, fLen, mPtr, mLen, qPtr, qLen, sPtr, sLen),
+        );
         core.athernet_free(fPtr, fLen);
         core.athernet_free(mPtr, mLen);
+        core.athernet_free(qPtr, qLen);
+        core.athernet_free(sPtr, sLen);
         post({ id: request.id, ok: true, json });
         break;
       }
